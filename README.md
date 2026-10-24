@@ -4,8 +4,10 @@ Android cihazın donanım bilgilerini, canlı sıcaklıklarını, erişilebilen 
 kayıtlarını ve iki bağımsız performans testini gösteren; aynı Wi-Fi ağındaki
 laptop tarayıcısından izlenebilen uygulama.
 
-APK: `C:\Users\Alican\Desktop\DeviceScope.apk`
-Proje: `C:\Users\Alican\AndroidProjects\DeviceScope`
+**Depo:** https://github.com/tutualican/DeviceScope
+**Sürüm:** v1.0.0 · APK sürüm ekinde (`DeviceScope.apk`, debug imzalı)
+
+Yerel kopya: `C:\Users\Alican\Desktop\DeviceScope.apk`
 
 Arayüz **sakin katmanlı yüzey** sistemidir: tek yönlü çok yumuşak gölge, kılcal
 çizgi kenarlık ve çok hafif cam parlaklığı. Neumorphism'in "tek parçadan oyulmuş"
