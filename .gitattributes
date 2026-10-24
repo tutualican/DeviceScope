@@ -1,0 +1,13 @@
+* text=auto eol=lf
+
+# Byte-identical twins: the -O2/-O3 comparison needs the sources to match
+# byte for byte, so never let an editor or git rewrite their endings.
+app/src/main/cpp/kernel_o2.cpp text eol=lf
+app/src/main/cpp/kernel_o3.cpp text eol=lf
+
+*.png binary
+*.jpg binary
+*.jar binary
+*.apk binary
+*.so binary
+*.spv binary

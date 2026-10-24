@@ -1,0 +1,25 @@
+#version 450
+// Integer ALU throughput probe. Each invocation runs an independent xorshift
+// chain so the result is data-dependent and cannot be optimised away.
+layout(local_size_x = 256) in;
+
+layout(std430, binding = 0) buffer Data {
+    uint data[];
+};
+
+layout(push_constant) uniform PC {
+    uint rounds;
+} pc;
+
+void main() {
+    uint idx = gl_GlobalInvocationID.x;
+    uint v = data[idx] + idx;
+    for (uint i = 0u; i < pc.rounds; i++) {
+        v ^= v << 13;
+        v ^= v >> 17;
+        v ^= v << 5;
+        v = v * 2654435761u + idx;
+        v ^= v >> 11;
+    }
+    data[idx] = v;
+}

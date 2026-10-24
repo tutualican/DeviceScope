@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">DeviceScope</string>
+    <string name="channel_name">Cihaz İzleme</string>
+    <string name="channel_desc">Uzaktan izleme sunucusu çalışırken gösterilir</string>
+</resources>

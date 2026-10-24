@@ -1,0 +1,31 @@
+# Gradle / Android build output
+.gradle/
+build/
+app/build/
+.cxx/
+.kotlin/
+local.properties
+captures/
+*.iml
+.idea/
+
+# Native objects
+*.o
+*.so.tmp
+obj/
+libs/
+
+# Signing material
+*.jks
+*.keystore
+keystore.properties
+signing.properties
+
+# OS noise
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Editor
+.vscode/
+*.swp

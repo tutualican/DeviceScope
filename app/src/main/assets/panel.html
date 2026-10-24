@@ -1,0 +1,591 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>DeviceScope · Cihaz Paneli</title>
+<style>
+:root{
+  --bg:#08080A; --bg2:#111116; --surface:#15151A; --surface2:#1B1B21;
+  --stroke:rgba(255,255,255,.09); --stroke2:rgba(255,255,255,.06);
+  --shadow:rgba(0,0,0,.55);
+  --accent:#4C9BFF; --cool:#64D2FF; --warn:#FFD60A; --orange:#FF9F0A; --bad:#FF453A;
+  --ai1:#BF9BFF; --ai2:#6EA8FF; --ai3:#4FE3C1; --ai4:#FFC978;
+  --tx:#F5F5F7; --tx2:#A6A6B0; --tx3:#6E6E79; --tx4:#55555F;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{background:var(--bg);color:var(--tx);
+  font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","Segoe UI",Roboto,Ubuntu,sans-serif;
+  -webkit-font-smoothing:antialiased}
+body{padding:0 0 70px;
+  background:
+    radial-gradient(760px 420px at 88% -6%, rgba(110,168,255,.16) 0%, rgba(110,168,255,0) 65%),
+    radial-gradient(620px 380px at 6% -10%, rgba(79,227,193,.10) 0%, rgba(79,227,193,0) 65%),
+    var(--bg);
+  background-attachment:fixed}
+.mono{font-variant-numeric:tabular-nums;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+
+/* ---------- header ---------- */
+header{padding:34px 28px 10px;max-width:1180px;margin:0 auto;
+  display:flex;align-items:flex-start;gap:20px;flex-wrap:wrap}
+.brand{font-size:24px;font-weight:700;letter-spacing:-.5px}
+.brand span{color:var(--accent)}
+.devinfo{margin-top:6px;font-size:13px;color:var(--tx2);line-height:1.6}
+.chips{display:flex;gap:7px;flex-wrap:wrap;margin-top:13px}
+.chip{font-size:11px;font-weight:500;padding:6px 11px;border-radius:999px;
+  background:rgba(255,255,255,.055);color:var(--tx2);white-space:nowrap;
+  border:1px solid var(--stroke2)}
+.hstat{margin-left:auto;text-align:right;font-size:12px;color:var(--tx2);line-height:1.8}
+.live{display:inline-flex;align-items:center;gap:7px;font-weight:600;font-size:12px;
+  color:var(--accent)}
+.pulse{width:7px;height:7px;border-radius:50%;background:var(--accent);
+  box-shadow:0 0 10px 1px rgba(76,155,255,.6);animation:p 2.4s infinite}
+@keyframes p{0%{opacity:1}50%{opacity:.35}100%{opacity:1}}
+.dead .pulse{background:var(--bad);animation:none;box-shadow:0 0 8px 1px rgba(255,69,58,.45)}
+.dead{color:var(--bad)}
+
+/* ---------- floating pill nav ---------- */
+nav{position:sticky;top:0;z-index:20;display:flex;gap:2px;justify-content:center;
+  padding:12px 28px;background:rgba(8,8,10,.72);backdrop-filter:blur(20px) saturate(140%);
+  -webkit-backdrop-filter:blur(20px) saturate(140%)}
+.navpill{display:inline-flex;gap:2px;padding:5px;border-radius:20px;
+  background:rgba(255,255,255,.055);border:1px solid var(--stroke2)}
+nav button{appearance:none;border:0;background:transparent;color:var(--tx3);
+  font:inherit;font-size:12.5px;font-weight:500;padding:9px 18px;border-radius:15px;cursor:pointer;
+  transition:background .18s ease,color .18s ease}
+nav button:hover{color:var(--tx2)}
+nav button.on{color:var(--tx);background:var(--surface);
+  box-shadow:0 4px 14px rgba(0,0,0,.4);font-weight:600}
+
+main{padding:18px 28px 0;max-width:1180px;margin:0 auto}
+h2.sec{font-size:13px;font-weight:600;color:var(--tx2);
+  margin:30px 0 12px;padding-left:4px}
+h2.sec:first-child{margin-top:2px}
+h2.sec .count{color:var(--tx4);font-weight:500;margin-left:6px}
+
+/* ---------- cards ---------- */
+.card{background:linear-gradient(180deg,var(--surface2),var(--surface));
+  border:1px solid var(--stroke);border-radius:24px;padding:20px 22px;margin-bottom:12px;
+  box-shadow:0 14px 34px var(--shadow)}
+.ctitle{font-size:15px;font-weight:600;color:var(--tx);margin-bottom:4px}
+.grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:12px}
+.grid2{display:grid;grid-template-columns:repeat(2,1fr);gap:12px}
+@media(max-width:820px){.grid3{grid-template-columns:1fr}.grid2{grid-template-columns:1fr}}
+
+.big{background:linear-gradient(180deg,var(--surface2),var(--surface));
+  border:1px solid var(--stroke);border-radius:24px;padding:20px 22px;position:relative;overflow:hidden;
+  box-shadow:0 14px 34px var(--shadow)}
+.big::before{content:"";position:absolute;left:22px;right:22px;top:0;height:2px;border-radius:2px;
+  background:linear-gradient(90deg,var(--ai1),var(--ai2),var(--ai3),var(--ai4));opacity:.75}
+.big .lab{font-size:12px;font-weight:500;color:var(--tx2)}
+.big .val{font-size:44px;font-weight:700;letter-spacing:-1.8px;line-height:1.05;margin-top:10px;
+  font-variant-numeric:tabular-nums}
+.big .val small{font-size:15px;font-weight:600;opacity:.5;letter-spacing:0;margin-left:4px}
+.big .sub{font-size:11.5px;color:var(--tx4);margin-top:8px}
+
+.t0{color:var(--cool)} .t1{color:var(--accent)} .t2{color:var(--warn)}
+.t3{color:var(--orange)} .t4{color:var(--bad)} .tna{color:var(--tx4)}
+
+/* ---------- kv rows ---------- */
+.kv{padding:13px 0;border-bottom:1px solid var(--stroke2)}
+.kv:last-child{border-bottom:0;padding-bottom:2px}
+.kv .k{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--tx2)}
+.kv .v{font-size:16px;font-weight:600;margin-top:5px;white-space:pre-line;word-break:break-word;user-select:text}
+.kv .d{font-size:12px;color:var(--tx3);margin-top:5px;line-height:1.65}
+.kv .src{font-size:11px;color:var(--tx4);margin-top:6px;
+  font-family:ui-monospace,Consolas,monospace;word-break:break-all}
+.flag{margin-left:auto;font-size:10.5px;font-weight:600;padding:4px 9px;border-radius:999px;white-space:nowrap}
+.f-OK{color:var(--accent);background:rgba(76,155,255,.13)}
+.f-ESTIMATE{color:var(--warn);background:rgba(255,214,10,.11)}
+.f-RESTRICTED{color:var(--orange);background:rgba(255,159,10,.12)}
+.f-MISSING{color:var(--bad);background:rgba(255,69,58,.12)}
+
+details.more{margin-top:6px}
+details.more summary{cursor:pointer;list-style:none;font-size:12.5px;font-weight:600;
+  color:var(--accent);padding:10px 2px 4px;user-select:none}
+details.more summary::-webkit-details-marker{display:none}
+details.more summary::after{content:" ›";opacity:.6}
+details.more[open] summary::after{content:" ⌄"}
+
+/* ---------- cores / zones ---------- */
+.core{display:flex;align-items:center;gap:12px;padding:6px 0}
+.core .n{width:56px;font-size:11px;color:var(--tx3);font-family:ui-monospace,Consolas,monospace}
+.core .track{flex:1;height:8px;border-radius:5px;background:rgba(255,255,255,.06);overflow:hidden}
+.core .fill{height:100%;border-radius:5px;
+  background:linear-gradient(90deg,rgba(76,155,255,.55),var(--accent));
+  transition:width .45s ease}
+.core .f{width:84px;text-align:right;font-size:11.5px;color:var(--tx2);
+  font-family:ui-monospace,Consolas,monospace}
+
+table{width:100%;border-collapse:collapse;font-size:12.5px}
+th{text-align:left;font-size:11px;color:var(--tx4);
+  padding:8px;border-bottom:1px solid var(--stroke);font-weight:500}
+td{padding:8px;border-bottom:1px solid var(--stroke2)}
+tr:last-child td{border-bottom:0}
+td.zname{font-family:ui-monospace,Consolas,monospace;font-size:11.5px;color:var(--tx2);word-break:break-all}
+td.zcat{font-size:11px;color:var(--tx4);white-space:nowrap}
+td.zval{text-align:right;font-family:ui-monospace,Consolas,monospace;font-weight:600;white-space:nowrap}
+
+canvas{width:100%;height:130px;display:block;border-radius:16px;background:rgba(255,255,255,.03);
+  border:1px solid var(--stroke2)}
+
+.note{font-size:12px;color:var(--tx4);line-height:1.75;padding:14px 2px 0}
+.legend{display:grid;gap:10px}
+.legend div{display:flex;gap:10px;font-size:12px;color:var(--tx3);line-height:1.55}
+.legend i{width:7px;height:7px;border-radius:50%;margin-top:6px;flex:0 0 7px}
+footer{max-width:1180px;margin:0 auto;padding:34px 28px 0;font-size:11.5px;color:var(--tx4);line-height:1.8}
+.warnbar{background:rgba(255,69,58,.10);color:#FFB6BF;border:1px solid rgba(255,69,58,.22);
+  border-radius:18px;padding:14px 18px;font-size:12.5px;margin-bottom:14px;display:none}
+</style>
+</head>
+<body>
+
+<header>
+  <div>
+    <div class="brand">Device<span>Scope</span></div>
+    <div class="devinfo" id="devinfo">Bağlanıyor…</div>
+    <div class="chips" id="chips"></div>
+  </div>
+  <div class="hstat">
+    <div id="livestat" class="live"><span class="pulse"></span><span>canlı</span></div>
+    <div id="clock" class="mono">--:--:--</div>
+    <div id="lat" class="mono" style="font-size:10px;color:var(--tx4)">—</div>
+  </div>
+</header>
+
+<nav>
+  <div class="navpill">
+    <button data-tab="0" class="on">Cihaz</button>
+    <button data-tab="1">Sıcaklık</button>
+    <button data-tab="2">Geçmiş</button>
+    <button data-tab="3">Testler</button>
+  </div>
+</nav>
+
+<main>
+  <div class="warnbar" id="warnbar"></div>
+
+  <!-- ============ THERMAL (always on top of Sıcaklık tab) ============ -->
+  <section id="tab1" style="display:none">
+    <h2 class="sec">Canlı Sıcaklık</h2>
+    <div class="grid3">
+      <div class="big"><div class="ring"></div>
+        <div class="lab">İşlemci</div>
+        <div class="val" id="v-cpu">—</div>
+        <div class="sub" id="s-cpu">SoC sensörü</div>
+      </div>
+      <div class="big"><div class="ring"></div>
+        <div class="lab">Batarya</div>
+        <div class="val" id="v-batt">—</div>
+        <div class="sub" id="s-batt">pil hücresi</div>
+      </div>
+      <div class="big"><div class="ring"></div>
+        <div class="lab">Hissedilen</div>
+        <div class="val" id="v-felt">—</div>
+        <div class="sub" id="s-felt">dış yüzey</div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="lab" style="font-size:9.5px;font-weight:800;letter-spacing:.12em;color:var(--tx2);text-transform:uppercase">Sıcaklık geçmişi · son 3 dakika</div>
+      <canvas id="chart" style="margin-top:10px"></canvas>
+      <div style="display:flex;gap:16px;margin-top:9px;font-size:10px;color:var(--tx4)">
+        <span><i style="display:inline-block;width:8px;height:8px;border-radius:2px;background:var(--accent)"></i> İşlemci</span>
+        <span><i style="display:inline-block;width:8px;height:8px;border-radius:2px;background:var(--cool)"></i> Batarya</span>
+        <span><i style="display:inline-block;width:8px;height:8px;border-radius:2px;background:var(--warn)"></i> Hissedilen</span>
+      </div>
+      <div class="note" id="formula"></div>
+    </div>
+
+    <h2 class="sec">Bileşen Sıcaklıkları</h2>
+    <div class="card" id="components"></div>
+
+    <h2 class="sec">Çekirdek Frekansları</h2>
+    <div class="card" id="cores"></div>
+
+    <h2 class="sec">Ham Sensörler <span id="zonecount" style="color:var(--tx4);font-weight:600"></span></h2>
+    <div class="card" style="padding:10px 14px">
+      <table><thead><tr><th>Sensör</th><th>Sınıf</th><th style="text-align:right">Sıcaklık</th></tr></thead>
+      <tbody id="zones"></tbody></table>
+    </div>
+    <div class="note">Bu tablo, cihazın /sys/class/thermal ve /sys/class/hwmon arayüzlerinde
+      uygulamaya açık olan gerçek sensörleri listeler. Bir bileşen burada yoksa o cihazda
+      o bileşen için erişilebilir sensör yok demektir.</div>
+  </section>
+
+  <!-- ============ DEVICE ============ -->
+  <section id="tab0"></section>
+
+  <!-- ============ HISTORY ============ -->
+  <section id="tab2" style="display:none"></section>
+
+  <!-- ============ BENCHMARKS ============ -->
+  <section id="tab3" style="display:none">
+    <h2 class="sec">Kayıtlı Testler <span id="benchcount" style="color:var(--tx4);font-weight:600"></span></h2>
+    <div class="card" style="padding:10px 14px" id="benchcard">
+      <table>
+        <thead><tr>
+          <th>Test</th><th>Cihaz</th><th>Tarih</th>
+          <th style="text-align:right">Toplam</th><th style="text-align:right">Detay</th>
+        </tr></thead>
+        <tbody id="benchrows"></tbody>
+      </table>
+    </div>
+    <div class="note" id="benchnote">Test sekmesinde Mikyas veya Kinetik çalıştırıldığında sonuçlar
+      burada listelenir. Puanlar ölçülen hızın sabit referansa oranıdır (1000 = referans);
+      ham metrikler telefon ekranındaki ayrıntı sayfasındadır.</div>
+  </section>
+
+  <footer>
+    DeviceScope · veriler cihazın kendi arayüzlerinden okunur, hiçbir sunucuya gönderilmez.<br>
+    <span style="color:var(--tx3)">DOĞRULANDI</span> platformdan okundu ·
+    <span style="color:var(--warn)">TAHMİN</span> gerçek verilerden hesaplandı ·
+    <span style="color:var(--orange)">KISITLI</span> Android uygulamaya kapalı ·
+    <span style="color:var(--bad)">KAYIT YOK</span> cihazda böyle bir veri yok
+  </footer>
+</main>
+
+<script>
+(function(){
+  "use strict";
+  var TOKEN = "__TOKEN__";
+  var TAB = 0;
+  var last = null;
+  var devSig = "", histSig = "", zoneSig = "";
+  var hist = {cpu:[], batt:[], felt:[]};
+  var failCount = 0;
+
+  function $(id){ return document.getElementById(id); }
+  function esc(s){
+    if (s === null || s === undefined) return "";
+    return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;")
+      .replace(/"/g,"&quot;").replace(/'/g,"&#39;");
+  }
+  function tempClass(v){
+    if (v === null || v === undefined) return "tna";
+    if (v < 35) return "t0";
+    if (v < 45) return "t1";
+    if (v < 55) return "t2";
+    if (v < 70) return "t3";
+    return "t4";
+  }
+  function fmtTemp(v){
+    if (v === null || v === undefined) return "—";
+    return v.toFixed(1).replace(".", ",");
+  }
+  var FLAGLABEL = {OK:"DOĞRULANDI", ESTIMATE:"TAHMİN", RESTRICTED:"KISITLI", MISSING:"KAYIT YOK"};
+
+  function kvHTML(items){
+    var out = "";
+    for (var i=0;i<items.length;i++){
+      var it = items[i];
+      out += '<div class="kv"><div class="k">' + esc(it.label);
+      if (it.flag && it.flag !== "OK"){
+        out += '<span class="flag f-' + it.flag + '">' + FLAGLABEL[it.flag] + '</span>';
+      }
+      out += '</div><div class="v">' + esc(it.value) + '</div>';
+      if (it.detail) out += '<div class="d">' + esc(it.detail) + '</div>';
+      if (it.source) out += '<div class="src">↳ ' + esc(it.source) + '</div>';
+      out += '</div>';
+    }
+    return out;
+  }
+
+  function renderSections(target, sections){
+    var html = "";
+    var PREVIEW = 4;
+    for (var i=0;i<sections.length;i++){
+      var s = sections[i];
+      var items = s.items || [];
+      var head = items.slice(0, PREVIEW);
+      var rest = items.slice(PREVIEW);
+      html += '<div class="card"><div class="ctitle">' + esc(s.title) + '</div>' +
+        kvHTML(head);
+      if (rest.length){
+        html += '<details class="more"><summary>' + items.length + ' alanın tümünü göster</summary>' +
+          kvHTML(rest) + '</details>';
+      }
+      html += '</div>';
+    }
+    target.innerHTML = html;
+  }
+
+  // ------------------------------------------------------------------ header
+  function renderHeader(state){
+    var m = state.meta;
+    $("devinfo").textContent = m.device;
+    var chips = [];
+    var soc = null, androidVer = null, cores = null, ram = null;
+    var dev = state.device || [];
+    for (var i=0;i<dev.length;i++){
+      if (dev[i].title.indexOf("SoC") >= 0){
+        for (var j=0;j<dev[i].items.length;j++){
+          var it = dev[i].items[j];
+          if (it.label === "SoC modeli" && it.value && it.value !== "—") soc = it.value;
+        }
+      }
+      if (dev[i].title.indexOf("Yazılım") >= 0){
+        for (var k=0;k<dev[i].items.length;k++){
+          if (dev[i].items[k].label === "Android sürümü") androidVer = dev[i].items[k].value;
+        }
+      }
+      if (dev[i].title.indexOf("İşlemci") >= 0){
+        for (var n=0;n<dev[i].items.length;n++){
+          if (dev[i].items[n].label === "Çekirdek sayısı") cores = dev[i].items[n].value;
+        }
+      }
+      if (dev[i].title.indexOf("Bellek") >= 0){
+        for (var r=0;r<dev[i].items.length;r++){
+          if (dev[i].items[r].label === "Toplam RAM") ram = dev[i].items[r].value;
+        }
+      }
+    }
+    if (soc) chips.push(soc);
+    if (cores) chips.push(cores + " çekirdek");
+    if (ram) chips.push("RAM " + ram);
+    if (androidVer) chips.push("Android " + androidVer);
+    $("chips").innerHTML = chips.map(function(c){ return '<span class="chip">' + esc(c) + '</span>'; }).join("");
+  }
+
+  // ----------------------------------------------------------------- thermal
+  function renderThermal(t){
+    $("v-cpu").textContent = fmtTemp(t.cpu);
+    $("v-cpu").className = "val mono " + tempClass(t.cpu);
+    $("v-cpu").innerHTML = fmtTemp(t.cpu) + (t.cpu === null ? "" : '<small>°C</small>');
+    $("s-cpu").textContent = t.cpu === null ? "sensör okunamıyor" : "°C · SoC termal bölgesi";
+
+    $("v-batt").className = "val mono " + tempClass(t.battery);
+    $("v-batt").innerHTML = fmtTemp(t.battery) + (t.battery === null ? "" : '<small>°C</small>');
+    $("s-batt").textContent = t.battery === null ? "sensör okunamıyor" : "°C · pil hücresi (gerçek)";
+
+    $("v-felt").className = "val mono " + tempClass(t.felt);
+    $("v-felt").innerHTML = fmtTemp(t.felt) + (t.felt === null ? "" : '<small>°C</small>');
+    $("s-felt").textContent = t.felt === null ? "hesaplanamadı"
+      : (t.feltEstimated ? "°C · tahmini değer" : "°C · yüzey sensörü");
+
+    $("formula").textContent = t.feltFormula || "";
+
+    // components
+    var cats = {CPU:"İşlemci",GPU:"Ekran kartı",BATTERY:"Batarya",CHARGER:"Şarj devresi",
+      MODEM:"Modem / RF",DISPLAY:"Ekran",SKIN:"Dış yüzey",MEMORY:"Bellek",CAMERA:"Kamera",
+      AMBIENT:"Ortam / kart",OTHER:"Diğer"};
+    var cm = t.categoryMax || {};
+    var html = "";
+    Object.keys(cats).forEach(function(k){
+      var v = (cm[k] === undefined) ? null : cm[k];
+      html += '<div class="kv"><div class="k">' + cats[k] + '</div>' +
+        '<div class="v mono ' + tempClass(v) + '" style="font-size:17px">' +
+        (v === null ? "—" : fmtTemp(v) + " °C") + '</div></div>';
+    });
+    $("components").innerHTML = html;
+
+    // cores
+    var ch = "";
+    var cmhz = t.coreMhz || [], cmax = t.coreMaxMhz || [];
+    for (var i=0;i<cmhz.length;i++){
+      var mx = cmax[i] || 0;
+      var p = mx > 0 ? Math.max(0, Math.min(1000, cmhz[i]/mx*1000)) : 0;
+      ch += '<div class="core"><div class="n">CPU ' + i + '</div>' +
+        '<div class="track"><div class="fill" style="width:' + (p/10) + '%"></div></div>' +
+        '<div class="f">' + (mx > 0 ? cmhz[i] + " MHz" : "—") + '</div></div>';
+    }
+    $("cores").innerHTML = ch || '<div class="note">Frekans bilgisi okunamadı.</div>';
+
+    // zones
+    var zs = t.zones || [];
+    var sig = zs.map(function(z){ return z.type; }).join("|");
+    if (sig !== zoneSig){
+      zoneSig = sig;
+      var zh = "";
+      for (var z=0;z<zs.length;z++){
+        zh += '<tr><td class="zname">' + esc(zs[z].type) + '</td>' +
+          '<td class="zcat">' + esc(zs[z].category) + '</td>' +
+          '<td class="zval ' + tempClass(zs[z].temp) + '">' + fmtTemp(zs[z].temp) + ' °C</td></tr>';
+      }
+      $("zones").innerHTML = zh || '<tr><td colspan="3" class="note">Okunabilir sensör yok.</td></tr>';
+    } else {
+      var rows = $("zones").children;
+      for (var r=0;r<rows.length && r<zs.length;r++){
+        var cell = rows[r].children[2];
+        cell.className = "zval " + tempClass(zs[r].temp);
+        cell.textContent = fmtTemp(zs[r].temp) + " °C";
+      }
+    }
+    $("zonecount").textContent = "· " + zs.length + " bölge";
+
+    // history buffers
+    var now = Date.now();
+    hist.cpu.push([now, t.cpu]);
+    hist.batt.push([now, t.battery]);
+    hist.felt.push([now, t.felt]);
+    var cut = now - 180000;
+    ["cpu","batt","felt"].forEach(function(k){
+      while (hist[k].length && hist[k][0][0] < cut) hist[k].shift();
+      if (hist[k].length > 240) hist[k].shift();
+    });
+    drawChart();
+  }
+
+  function drawChart(){
+    var c = $("chart");
+    if (!c) return;
+    var dpr = window.devicePixelRatio || 1;
+    var w = c.clientWidth, h = c.clientHeight;
+    if (!w || !h) return;
+    c.width = Math.floor(w*dpr); c.height = Math.floor(h*dpr);
+    var ctx = c.getContext("2d");
+    ctx.setTransform(dpr,0,0,dpr,0,0);
+    ctx.clearRect(0,0,w,h);
+
+    var all = hist.cpu.concat(hist.batt, hist.felt).filter(function(p){ return p[1] !== null; });
+    if (!all.length){
+      ctx.fillStyle = "#4E6070"; ctx.font = "11px sans-serif";
+      ctx.fillText("Veri toplanıyor…", 10, h/2);
+      return;
+    }
+    var min = 25, max = 70;
+    for (var i=0;i<all.length;i++){ if (all[i][1] < min) min = all[i][1]; if (all[i][1] > max) max = all[i][1]; }
+    min = Math.floor(min - 3); max = Math.ceil(max + 3);
+    if (max - min < 12) max = min + 12;
+
+    var now = Date.now();
+    var t0 = now - 180000;
+    function px(ts){ return ((ts - t0) / 180000) * w; }
+    function py(v){ return h - ((v - min) / (max - min)) * h; }
+
+    // grid
+    ctx.strokeStyle = "rgba(34,48,61,.75)"; ctx.lineWidth = 1;
+    for (var g=0; g<=3; g++){
+      var yy = (h/3)*g;
+      ctx.beginPath(); ctx.moveTo(0, yy); ctx.lineTo(w, yy); ctx.stroke();
+    }
+    // labels
+    ctx.fillStyle = "#4E6070"; ctx.font = "9px ui-monospace,Consolas,monospace";
+    ctx.fillText(Math.round(max) + "°", 4, 10);
+    ctx.fillText(Math.round(min) + "°", 4, h-4);
+
+    function line(data, color){
+      ctx.beginPath(); ctx.strokeStyle = color; ctx.lineWidth = 2;
+      ctx.lineJoin = "round"; ctx.lineCap = "round";
+      var started = false;
+      for (var i=0;i<data.length;i++){
+        var v = data[i][1];
+        if (v === null || v === undefined){ started = false; continue; }
+        var x = px(data[i][0]), y = py(v);
+        if (!started){ ctx.moveTo(x,y); started = true; } else ctx.lineTo(x,y);
+      }
+      ctx.stroke();
+    }
+    line(hist.cpu, "#00E5A0");
+    line(hist.batt, "#63D2FF");
+    line(hist.felt, "#FFC24B");
+  }
+
+  // ------------------------------------------------------------------ fetch
+  function load(){
+    var url = "/api/state?k=" + encodeURIComponent(TOKEN);
+    var t0 = performance.now();
+    fetch(url, {cache:"no-store"}).then(function(r){
+      if (r.status === 401) throw new Error("Yetkisiz anahtar");
+      if (!r.ok) throw new Error("HTTP " + r.status);
+      return r.json();
+    }).then(function(state){
+      failCount = 0;
+      last = state;
+      $("livestat").className = "live";
+      $("livestat").innerHTML = '<span class="pulse"></span><span>canlı</span>';
+      $("lat").textContent = Math.round(performance.now() - t0) + " ms · 2,5 sn";
+      $("warnbar").style.display = "none";
+
+      renderHeader(state);
+      renderThermal(state.thermal);
+
+      var ds = JSON.stringify(state.device);
+      if (ds !== devSig){ devSig = ds; renderSections($("tab0"), state.device || []); }
+      var hs = JSON.stringify(state.history);
+      if (hs !== histSig){ histSig = hs; renderSections($("tab2"), state.history || []); }
+    }).catch(function(e){
+      failCount++;
+      if (failCount >= 2){
+        $("livestat").className = "live dead";
+        $("livestat").innerHTML = '<span class="pulse"></span><span>bağlantı yok</span>';
+        $("warnbar").style.display = "block";
+        $("warnbar").textContent = "Telefonla bağlantı kurulamadı: " + e.message +
+          ". Telefonun aynı Wi-Fi'da ve uygulamanın açık olduğunu kontrol et.";
+      }
+    });
+  }
+
+  // --------------------------------------------------------------- benchmarks
+  function fmtScore(v){
+    return (v === null || v === undefined) ? "—" : Number(v).toFixed(1);
+  }
+  function benchDetail(r){
+    if (r.suite === "Kinetik"){
+      return "GPU " + fmtScore(r.gpu) + " · UX " + fmtScore(r.ux) + " · ısı " + fmtScore(r.sustained);
+    }
+    return "tek " + fmtScore(r.single) + " · çok " + fmtScore(r.multi);
+  }
+  function renderBenchmarks(runs){
+    var tbody = $("benchrows");
+    $("benchcount").textContent = runs.length ? "(" + runs.length + ")" : "";
+    if (!runs.length){
+      tbody.innerHTML = '<tr><td colspan="5" style="color:var(--tx4)">Kayıt yok</td></tr>';
+      return;
+    }
+    var html = "";
+    for (var i = 0; i < runs.length; i++){
+      var r = runs[i];
+      var d = new Date(r.timestamp);
+      html += "<tr>" +
+        "<td>" + esc(r.suite || "—") + "</td>" +
+        "<td>" + esc(r.device || "—") + "</td>" +
+        '<td class="mono" style="white-space:nowrap">' + d.toLocaleDateString("tr-TR") + " " +
+          d.toLocaleTimeString("tr-TR", {hour:"2-digit", minute:"2-digit"}) + "</td>" +
+        '<td class="mono" style="text-align:right;color:var(--accent);font-weight:700">' + fmtScore(r.total) + "</td>" +
+        '<td style="text-align:right;color:var(--tx3)">' + esc(benchDetail(r)) + "</td>" +
+        "</tr>";
+    }
+    tbody.innerHTML = html;
+  }
+  function loadBenchmarks(){
+    fetch("/api/benchmarks?k=" + encodeURIComponent(TOKEN), {cache:"no-store"})
+      .then(function(r){ if (!r.ok) throw new Error("HTTP " + r.status); return r.json(); })
+      .then(function(d){ renderBenchmarks(d.runs || []); })
+      .catch(function(){});
+  }
+
+  // ------------------------------------------------------------------- tabs
+  document.querySelector("nav").addEventListener("click", function(e){
+    var b = e.target.closest("button");
+    if (!b) return;
+    var idx = parseInt(b.getAttribute("data-tab"), 10);
+    if (idx === TAB) return;
+    TAB = idx;
+    Array.prototype.forEach.call(document.querySelectorAll("nav button"), function(x){
+      x.classList.toggle("on", parseInt(x.getAttribute("data-tab"),10) === idx);
+    });
+    $("tab0").style.display = idx === 0 ? "block" : "none";
+    $("tab1").style.display = idx === 1 ? "block" : "none";
+    $("tab2").style.display = idx === 2 ? "block" : "none";
+    $("tab3").style.display = idx === 3 ? "block" : "none";
+    if (idx === 1) drawChart();
+    if (idx === 3) loadBenchmarks();
+    window.scrollTo({top:0, behavior:"smooth"});
+  });
+
+  function tick(){
+    var d = new Date();
+    $("clock").textContent = d.toLocaleTimeString("tr-TR");
+  }
+  setInterval(tick, 1000); tick();
+
+  window.addEventListener("resize", function(){ drawChart(); });
+
+  load();
+  setInterval(load, 2500);
+  setInterval(loadBenchmarks, 15000);
+})();
+</script>
+</body>
+</html>

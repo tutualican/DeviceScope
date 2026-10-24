@@ -1,0 +1,16 @@
+{
+  "version": 2,
+  "description": "DeviceScope bileşik puan ağırlıkları. Toplam ağırlık 1.00 olmak zorunda değil; eksik grup varsa kalan ağırlıklar yeniden normalize edilir.",
+  "weights": {
+    "cpu": 0.40,
+    "gpu": 0.30,
+    "memory": 0.15,
+    "ux": 0.15
+  },
+  "groups": {
+    "cpu": ["single", "multi"],
+    "gpu": ["gpu"],
+    "memory": ["memory", "storage"],
+    "ux": ["ux"]
+  }
+}
