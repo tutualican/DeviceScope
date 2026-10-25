@@ -71,7 +71,8 @@ class StabilityTest {
         // single ratio = 90 / 120 = 75 %, multi ratio = 100 %; average = 87.5 %
         assertEquals(87.5, stats.retentionPercent ?: -1.0, 0.01)
         assertEquals(87.5, stats.retentionRawPercent ?: -1.0, 0.01)
-        assertFalse(stats.slowStart)
+        // The first window (100) is more than 5 % below the best (120): slow start.
+        assertTrue(stats.slowStart)
         assertTrue((stats.retentionPercent ?: 0.0) <= 100.0)
     }
 
@@ -84,6 +85,8 @@ class StabilityTest {
         val stats = analyseStability(single + multi, warmupMs = 0L)
         assertEquals(100.0, stats.retentionPercent ?: -1.0, 0.001)
         assertTrue(stats.retentionScore <= 1000.0)
+        // Throughput was still climbing: the first window is well below the best.
+        assertTrue(stats.slowStart)
     }
 
     @Test

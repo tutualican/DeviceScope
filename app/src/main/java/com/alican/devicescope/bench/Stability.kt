@@ -28,8 +28,9 @@ internal fun analyseStability(rounds: List<RoundSample>, warmupMs: Long): Stabil
     val multiSeries = typeSeries(false)
 
     fun windowStats(series: List<Double>): WindowStats {
-        if (series.size < 6) return WindowStats(null, null)
+        if (series.size < 6) return WindowStats(null, null, null)
         val window = (series.size / 5).coerceIn(4, 40).coerceAtMost(series.size)
+        val first = Stats.median(series.take(window))
         val last = Stats.median(series.takeLast(window))
         var best = Double.NEGATIVE_INFINITY
         var i = 0
@@ -38,7 +39,7 @@ internal fun analyseStability(rounds: List<RoundSample>, warmupMs: Long): Stabil
             if (m > best) best = m
             i += (window / 2).coerceAtLeast(1)
         }
-        return WindowStats(best, last)
+        return WindowStats(best, last, first)
     }
 
     val singleWindow = windowStats(singleSeries)
@@ -49,7 +50,17 @@ internal fun analyseStability(rounds: List<RoundSample>, warmupMs: Long): Stabil
 
     val ratios = listOfNotNull(windowRatio(singleWindow), windowRatio(multiWindow))
     val rawRetention = if (ratios.isNotEmpty()) ratios.average() else null
-    val slowStart = rawRetention != null && rawRetention > 105.0
+    // The best-window reference caps the raw ratio at 100 % by construction.
+    // "Slow start" therefore also covers the real slow-start shape: a first
+    // window more than 5 % below the best window (the device was still settling
+    // when measurement began, or the ratio guard above would have fired).
+    val slowStart = (rawRetention != null && rawRetention > 105.0) ||
+        listOfNotNull(
+            singleWindow.first to singleWindow.best,
+            multiWindow.first to multiWindow.best
+        ).any { (first, best) ->
+            first != null && best != null && best > 0 && first < best * 0.95
+        }
     val retention = rawRetention?.coerceAtMost(100.0)
 
     val singleCv = if (singleSeries.size >= 3) Stats.cvPercent(singleSeries) else 0.0
@@ -93,4 +104,4 @@ internal fun analyseStability(rounds: List<RoundSample>, warmupMs: Long): Stabil
     )
 }
 
-private data class WindowStats(val best: Double?, val last: Double?)
+private data class WindowStats(val best: Double?, val last: Double?, val first: Double?)

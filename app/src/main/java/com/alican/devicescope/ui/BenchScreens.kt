@@ -633,7 +633,7 @@ private fun StabilityBody(r: com.alican.devicescope.bench.MarathonResult) {
     )
     if (s.slowStart) {
         Spacer(Modifier.height(6.dp))
-        SoftChip("başlangıç yavaş · oran kırpıldı", p.warm)
+        SoftChip("başlangıç yavaş · ilk pencere en iyiden >%5 düşük", p.warm)
     }
     if (r.lowBatteryWarning) {
         Spacer(Modifier.height(6.dp))
