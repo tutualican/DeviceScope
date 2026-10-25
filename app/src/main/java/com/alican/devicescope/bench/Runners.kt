@@ -107,16 +107,19 @@ class SystemMonitor(private val context: Context) {
     fun start() {
         if (job != null) return
         job = scope.launch {
-            val deadline = System.currentTimeMillis() + 20 * 60_000L
+            // Long enough for a 45 minute marathon plus preparation; the app is
+            // a foreground service during that time, so the loop is not killed
+            // by Doze. Samples cap at ~70 minutes of 0.5 s readings.
+            val deadline = System.currentTimeMillis() + 70 * 60_000L
             while (System.currentTimeMillis() < deadline) {
                 try {
                     val snap = thermal.read()
-                    snap.cpuC?.let { if (temps.size < 4000) temps.add(it) }
-                    snap.batteryC?.let { if (batteryTemps.size < 4000) batteryTemps.add(it) }
-                    snap.coreMhz.maxOrNull()?.let { if (freqs.size < 4000) freqs.add(it) }
+                    snap.cpuC?.let { if (temps.size < 9000) temps.add(it) }
+                    snap.batteryC?.let { if (batteryTemps.size < 9000) batteryTemps.add(it) }
+                    snap.coreMhz.maxOrNull()?.let { if (freqs.size < 9000) freqs.add(it) }
                 } catch (_: Throwable) {
                 }
-                batteryPercent()?.let { if (battery.size < 4000) battery.add(it) }
+                batteryPercent()?.let { if (battery.size < 9000) battery.add(it) }
                 delay(500)
             }
         }
@@ -244,7 +247,9 @@ class KinetikRunner(private val context: Context) {
 
         onProgress("Arayüz akıcılığı · 4,5 sn gerçek kare ölçümü", 0.30f)
         val ux = try {
-            uxBench.run(4500)
+            // A backgrounded app gets no Choreographer callbacks; without a
+            // timeout this coroutine would never resume and the suite would hang.
+            kotlinx.coroutines.withTimeout(20_000L) { uxBench.run(4500) }
         } catch (t: Throwable) {
             null
         }
@@ -370,6 +375,13 @@ object ResultStore {
         return file
     }
 
+    /** Maraton: full series, so the browser panel can chart it after a restart. */
+    fun saveMarathon(context: Context, result: MarathonResult): File {
+        val file = File(dir(context), "maraton_${stamp(result.timestamp)}.json")
+        file.writeText(MarathonJson.encode(result))
+        return file
+    }
+
     fun list(context: Context): List<File> =
         dir(context).listFiles()?.sortedByDescending { it.lastModified() } ?: emptyList()
 
@@ -393,6 +405,7 @@ object ResultStore {
         val gpu: Double?,
         val ux: Double?,
         val sustained: Double?,
+        val stability: Double?,
         val api: String?
     )
 
@@ -418,6 +431,7 @@ object ResultStore {
                 gpu = scores?.optDoubleOrNull("gpu"),
                 ux = scores?.optDoubleOrNull("ux"),
                 sustained = scores?.optDoubleOrNull("sustained"),
+                stability = scores?.optDoubleOrNull("stability"),
                 api = root.optJSONObject("gpu")?.optString("api")?.takeIf { it.isNotBlank() }
             )
         } catch (t: Throwable) {

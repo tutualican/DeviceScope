@@ -45,6 +45,7 @@ import com.alican.devicescope.Section
 import com.alican.devicescope.ServerState
 import com.alican.devicescope.ThermalCollector
 import com.alican.devicescope.ThermalSnapshot
+import com.alican.devicescope.TestMode
 import com.alican.devicescope.bench.BenchController
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -124,6 +125,10 @@ fun DeviceScopeApp(state: AppState, bench: BenchController) {
     }
 
     SoftTheme(dark = state.dark) {
+        if (TestMode.active) {
+            TestModeScreen(bench)
+            return@SoftTheme
+        }
         Box(
             Modifier
                 .fillMaxSize()

@@ -123,6 +123,7 @@ class MonitorService : Service() {
             sb.append("\"gpu\":").append(numOrNull(r.gpu)).append(',')
             sb.append("\"ux\":").append(numOrNull(r.ux)).append(',')
             sb.append("\"sustained\":").append(numOrNull(r.sustained)).append(',')
+            sb.append("\"stability\":").append(numOrNull(r.stability)).append(',')
             sb.append("\"api\":").append(if (r.api == null) "null" else "\"${escape(r.api)}\"")
             sb.append('}')
         }

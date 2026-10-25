@@ -74,14 +74,14 @@ fun TestScreen(state: AppState, bench: BenchController) {
             SoftTitle("Test", "Ölçüm, kıyas ve kendi kendini doğrulama")
             Spacer(Modifier.height(10.dp))
             SoftSegmented(
-                items = listOf("Mikyas", "Kinetik", "Kıyas", "Doğrulama"),
+                items = listOf("Maraton", "Mikyas", "Kinetik", "Kıyas", "Doğrulama"),
                 selected = sub,
                 onSelect = { sub = it }
             )
             Spacer(Modifier.height(4.dp))
         }
 
-        if (sub < 2 && !bench.nativeAvailable) {
+        if (sub < 3 && !bench.nativeAvailable) {
             Box(Modifier.padding(18.dp)) {
                 SoftCard(Modifier.fillMaxWidth()) {
                     SoftText("Ölçüm çekirdeği yüklenemedi", size = 15, weight = FontWeight.SemiBold, color = p.crit)
@@ -101,14 +101,365 @@ fun TestScreen(state: AppState, bench: BenchController) {
 
         Box(Modifier.weight(1f).fillMaxWidth()) {
             when (sub) {
-                0 -> MikyasView(bench)
-                1 -> KinetikView(bench)
-                2 -> CompareView(bench)
+                0 -> MaratonView(bench)
+                1 -> MikyasView(bench)
+                2 -> KinetikView(bench)
+                3 -> CompareView(bench)
                 else -> ValidationView()
             }
         }
     }
 }
+
+// --------------------------------------------------------------------- Maraton
+
+@Composable
+private fun MaratonView(bench: BenchController) {
+    val p = LocalSoft.current
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var minutes by remember { mutableStateOf(15) }
+
+    ScreenScroll {
+        SoftCard(Modifier.fillMaxWidth(), padding = 20.dp) {
+            SoftText("Maraton", size = 22, weight = FontWeight.Bold)
+            Spacer(Modifier.height(4.dp))
+            SoftText(
+                "Tek çekirdek, çok çekirdek, bellek, depolama, GPU, ekran sahnesi ve ısıl kararlılık " +
+                    "tek koşuda. Süre bir alt sınırdır: 15 dakikadan önce bitmez.",
+                size = 13,
+                color = p.text2
+            )
+            Spacer(Modifier.height(14.dp))
+            SoftSegmented(
+                items = listOf("15 dk", "30 dk", "45 dk"),
+                selected = when (minutes) {
+                    30 -> 1
+                    45 -> 2
+                    else -> 0
+                },
+                onSelect = { minutes = listOf(15, 30, 45)[it] }
+            )
+            Spacer(Modifier.height(14.dp))
+
+            if (bench.marathonRunning) {
+                ProgressCard(
+                    "${bench.marathonPhase} · ${bench.marathonDetail}",
+                    bench.marathonProgress
+                )
+                Spacer(Modifier.height(10.dp))
+                SoftButton(
+                    "Testi durdur",
+                    onClick = { bench.cancelMarathon() },
+                    modifier = Modifier.fillMaxWidth(),
+                    danger = true
+                )
+            } else {
+                SoftButton(
+                    (if (bench.marathon == null) "Maratonu başlat  ·  $minutes dk"
+                    else "Yeniden ölç  ·  $minutes dk"),
+                    onClick = { bench.runMarathon(minutes) },
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+
+            Spacer(Modifier.height(10.dp))
+            SoftText(
+                "Başlarken telefon test moduna girer: tam ekran görsel sahne, ekran açık, parlaklık %100 " +
+                    "ve ön plan servisi. Rootsuz bir uygulama diğer uygulamaları askıya alamaz; bu yüzden " +
+                    "test sırasında ekranın kapanmadığı ayrıca kontrol edilir ve raporda yazar.",
+                size = 11,
+                color = p.text3
+            )
+        }
+
+        bench.error?.let {
+            Spacer(Modifier.height(10.dp))
+            EmptyNote("Hata: $it")
+        }
+
+        val r = bench.marathon
+        if (r != null) {
+            Spacer(Modifier.height(12.dp))
+            SoftHeroScore(
+                label = "MARATON PUANI",
+                score = r.total,
+                subtitle = "${r.device} · ${duration(r.durationSeconds)}\n" +
+                    "${r.config.effectiveMinutes} dk hedef · ${r.rounds.size} sürdürülen tur",
+                fraction = (r.total / 1600.0).toFloat(),
+                badge = when {
+                    !r.verified -> "Doğrulama hatası"
+                    r.throttled -> "Isıl kısıtlama saptandı"
+                    else -> "Kararlı koşu"
+                },
+                badgeColor = when {
+                    !r.verified -> p.crit
+                    r.throttled -> p.warm
+                    else -> p.accent
+                }
+            )
+
+            Spacer(Modifier.height(10.dp))
+            SoftDisclosure(
+                title = "Bileşen puanları",
+                subtitle = "Ağırlıklı ortalama; eksik bileşen varsa kalanlar normalize edilir",
+                defaultOpen = true
+            ) {
+                ScoreRow("Tek çekirdek · %18", r.singleScore, p.accent)
+                Spacer(Modifier.height(12.dp))
+                ScoreRow("Çok çekirdek · %22", r.multiScore, p.cool)
+                Spacer(Modifier.height(12.dp))
+                ScoreRow("Bellek · %8", r.memoryScore, p.warm)
+                Spacer(Modifier.height(12.dp))
+                ScoreRow("Depolama · %8", r.storageScore, p.hot)
+                Spacer(Modifier.height(12.dp))
+                ScoreRow("GPU · %20", r.gpuScore, p.cool)
+                Spacer(Modifier.height(12.dp))
+                ScoreRow("Görsel/arayüz · %12", r.uxScore, p.accent)
+                Spacer(Modifier.height(12.dp))
+                ScoreRow("Kararlılık · %12", r.stabilityScore, p.warm)
+            }
+
+            Spacer(Modifier.height(10.dp))
+            SoftDisclosure(
+                title = "Isıl kararlılık",
+                subtitle = "Sürdürülen yük boyunca hız koruma ve sapma",
+                trailing = r.retentionPercent?.let { String.format(Locale.US, "%.1f%%", it) } ?: "—"
+            ) {
+                StabilityBody(r)
+            }
+
+            Spacer(Modifier.height(10.dp))
+            SoftDisclosure(
+                title = "Tek çekirdek ölçümleri",
+                subtitle = "Geekbench tarzı: 7 iş yükü, tek iş parçacığı",
+                trailing = "${r.single.size}"
+            ) {
+                MeasurementTable(r.single)
+            }
+
+            Spacer(Modifier.height(10.dp))
+            SoftDisclosure(
+                title = "Çok çekirdek ölçümleri",
+                subtitle = "${r.cores} çekirdek · ${r.multi.firstOrNull()?.threads ?: 0} iş parçacığı",
+                trailing = "${r.multi.size}"
+            ) {
+                MeasurementTable(r.multi)
+            }
+
+            Spacer(Modifier.height(10.dp))
+            SoftDisclosure(
+                title = "GPU ve görsel sahne",
+                subtitle = "Vulkan compute + ekranda gerçek kare ölçümü",
+                trailing = r.gpuApi
+            ) {
+                SoftKeyValue("API", r.gpuApi, if (r.gpuApi == "Vulkan") p.accent else p.warm)
+                SoftKeyValue("Aygıt", r.gpu?.renderer ?: "—", p.text2)
+                SoftKeyValue(
+                    "Compute",
+                    r.gpu?.computeGops?.let { String.format(Locale.US, "%.1f Gop/s", it) } ?: "ölçülemedi",
+                    if (r.gpu?.computeGops != null) p.accent else p.warm
+                )
+                SoftKeyValue(
+                    "Çevrimdışı sahne",
+                    r.gpu?.sceneFps?.let { String.format(Locale.US, "%.0f fps (1024²)", it) } ?: "ölçülemedi",
+                    if (r.gpu?.sceneFps != null) p.cool else p.warm
+                )
+                val scene = r.scene
+                if (scene != null) {
+                    SoftDivider()
+                    SoftKeyValue("Ekran sahnesi", String.format(Locale.US, "%.1f fps", scene.avgFps), p.accent)
+                    SoftKeyValue("Ortanca kare", String.format(Locale.US, "%.2f ms", scene.medianFrameMs), p.text2)
+                    SoftKeyValue("95. yüzdelik", String.format(Locale.US, "%.2f ms", scene.p95FrameMs), p.text2)
+                    SoftKeyValue("Takılma", String.format(Locale.US, "%.1f%%", scene.jankPercent), cvColor(scene.jankPercent))
+                    SoftKeyValue("Ölçülen kare", "${scene.frames} / ${scene.durationMs / 1000} sn", p.text3)
+                } else {
+                    Spacer(Modifier.height(6.dp))
+                    SoftText(
+                        "Ekran sahnesi ölçülemedi (uygulama ön planda değildi veya sahne iptal edildi).",
+                        size = 12,
+                        color = p.warm
+                    )
+                }
+                r.gpuNote?.let {
+                    Spacer(Modifier.height(6.dp))
+                    SoftText(it, size = 12, color = p.warm)
+                }
+            }
+
+            Spacer(Modifier.height(10.dp))
+            SoftDisclosure(
+                title = "Sistem izleme",
+                subtitle = "0,5 sn'de bir sıcaklık, frekans ve batarya",
+                trailing = "${r.monitor.cpuTemps.size} örnek"
+            ) {
+                MonitorBody(r.monitor)
+            }
+
+            Spacer(Modifier.height(10.dp))
+            SoftDisclosure(
+                title = "Bu puan nasıl doğrulandı?",
+                subtitle = "Bilinen-cevap, sağlama, uzun süreli tur ve ekran kontrolü",
+                trailing = if (r.verified) "geçti" else "hata"
+            ) {
+                SoftKeyValue(
+                    "Bilinen-cevap testleri",
+                    if (r.verified) "tümü geçti" else "başarısız: ${r.failedWorkloads}",
+                    if (r.verified) p.accent else p.crit
+                )
+                SoftKeyValue("Sağlama toplamı", if ((r.single + r.multi).all { it.checksumStable }) "eşleşti" else "EŞLEŞMEDİ",
+                    if ((r.single + r.multi).all { it.checksumStable }) p.accent else p.crit)
+                SoftKeyValue(
+                    "Ekran açık kaldı",
+                    if (r.screenChecks == 0) "kontrol edilemedi"
+                    else if (r.screenKeptOn) "evet (${r.screenChecks} kontrol)"
+                    else "HAYIR (${r.screenOffChecks}/${r.screenChecks})",
+                    when {
+                        r.screenChecks == 0 -> p.text3
+                        r.screenKeptOn -> p.accent
+                        else -> p.crit
+                    }
+                )
+                Spacer(Modifier.height(8.dp))
+                SoftText(
+                    "Puanlar ölçülen hızın sabit referansa oranıdır (1000 = referans). Kararlılık puanı " +
+                        "hız koruma oranı ile sürdürülen ölçümlerin sapmasından hesaplanır; formül " +
+                        "aşağıdaki açıklamada yazar.",
+                    size = 12,
+                    color = p.text3
+                )
+            }
+
+            ResultActions(
+                filePath = bench.marathonSavedFile?.absolutePath,
+                shareText = bench.shareText("Maraton"),
+                onShareCard = {
+                    val card = ShareCard.render(
+                        context = context,
+                        suite = "Maraton",
+                        score = r.total,
+                        subtitle = "${r.device} · ${r.config.effectiveMinutes} dk",
+                        rows = listOf(
+                            "Tek çekirdek" to n1(r.singleScore),
+                            "Çok çekirdek" to n1(r.multiScore),
+                            "Bellek" to n1(r.memoryScore),
+                            "Depolama" to n1(r.storageScore),
+                            "GPU" to n1(r.gpuScore),
+                            "Görsel/arayüz" to n1(r.uxScore),
+                            "Kararlılık" to n1(r.stabilityScore),
+                            "Hız koruma" to (r.retentionPercent?.let { String.format(Locale.US, "%.1f%%", it) } ?: "—"),
+                            "Isıl tepe" to temp(r.peakTempC),
+                            "Süre" to duration(r.durationSeconds)
+                        ),
+                        footer = "Puanlar ölçülen hızın sabit referansa oranıdır (1000 = referans). " +
+                            "Sürdürülen turlar, sıcaklık eğrisi ve ham metrikler uygulamada görünür."
+                    )
+                    scope.launch(Dispatchers.IO) {
+                        withContext(Dispatchers.Main) {
+                            ShareCard.share(context, card, "Maraton sonucunu paylaş")
+                        }
+                    }
+                }
+            )
+
+            Spacer(Modifier.height(14.dp))
+        }
+
+        SoftDisclosure(
+            title = "Maraton nasıl ölçüyor?",
+            subtitle = "Sıra, süre garantisi, kararlılık formülü ve sınırlar"
+        ) {
+            SoftText(
+                "Sıra: bilinen-cevap doğrulaması → tek çekirdek (7 iş yükü) → çok çekirdek → bellek → " +
+                    "128 MB depolama → Vulkan GPU → ekranda görsel sahne → sürdürülen tur döngüsü. " +
+                    "Sürdürülen döngü, duvar saati hedef süreye ulaşana kadar tek/çok çekirdek yükünü " +
+                    "dönüşümlü uygular ve yaklaşık saniyede bir sıcaklık/frekans kaydeder.",
+                size = 12,
+                color = p.text3
+            )
+            Spacer(Modifier.height(8.dp))
+            SoftText(
+                "Kararlılık = 1000 × (son üçte bir ortancası / ilk üçte bir ortancası) × " +
+                    "(1 − sürdürülen ölçümlerin CV'si). %100 koruma ve sıfır sapma 1000 puandır; " +
+                    "1100 ile sınırlanır. En az 6 sürdürülen örnek yoksa kararlılık puanı üretilmez.",
+                size = 12,
+                color = p.text3
+            )
+            Spacer(Modifier.height(8.dp))
+            SoftText(
+                "Sınırlar: ortam sıcaklığı sabitlenemez, diğer uygulamalar rootsuz askıya alınamaz, " +
+                    "Vulkan sürücüsü reddederse GLES 3.1 yedek yolu kullanılır ve raporda yazar. " +
+                    "Bu değerler Geekbench veya AnTuTu'nun kendi puanları değildir; aynı iş yükü " +
+                    "sınıflarını kendi referans sabitlerimizle ölçen bağımsız puanlardır.",
+                size = 12,
+                color = p.text3
+            )
+        }
+
+        Spacer(Modifier.height(14.dp))
+    }
+}
+
+@Composable
+private fun StabilityBody(r: com.alican.devicescope.bench.MarathonResult) {
+    val p = LocalSoft.current
+    val retention = r.retentionPercent
+    SoftKeyValue(
+        "Hız koruma oranı",
+        retention?.let { String.format(Locale.US, "%.1f%%", it) } ?: "yetersiz örnek",
+        when {
+            retention == null -> p.text3
+            retention >= 90 -> p.accent
+            retention >= 80 -> p.warm
+            else -> p.crit
+        }
+    )
+    SoftKeyValue(
+        "Kararlılık puanı",
+        n1(r.stabilityScore),
+        if (r.stabilityScore >= 850) p.accent else if (r.stabilityScore >= 650) p.warm else p.crit
+    )
+    SoftKeyValue(
+        "Sürdürülen sapma (CV)",
+        String.format(Locale.US, "%.2f%%", r.stabilityCv),
+        cvColor(r.stabilityCv)
+    )
+    SoftKeyValue(
+        "Sıcaklık",
+        "${temp(r.startTempC)} → ${temp(r.peakTempC)} → ${temp(r.endTempC)}",
+        p.tempColor(r.peakTempC)
+    )
+    SoftKeyValue(
+        "Sürdürülen tur",
+        "${r.rounds.size} tur · dönüşümlü tek/çok çekirdek",
+        p.text3
+    )
+    if (r.rounds.size > 4) {
+        Spacer(Modifier.height(12.dp))
+        SoftText("Sürdürülen hız indeksi", size = 12, color = p.text3)
+        Spacer(Modifier.height(6.dp))
+        Sparkline(r.rounds.map { it.index }, p.accent)
+    }
+    if (r.tempSamples.size > 4) {
+        Spacer(Modifier.height(12.dp))
+        SoftText("CPU sıcaklığı (°C)", size = 12, color = p.text3)
+        Spacer(Modifier.height(6.dp))
+        Sparkline(r.tempSamples.map { it.second.toDouble() }, p.hot)
+    }
+    Spacer(Modifier.height(8.dp))
+    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        if (r.throttled) SoftChip("ısıl kısıtlama", p.warm) else SoftChip("koruma ≥ %85", p.accent)
+        if (r.screenKeptOn) SoftChip("ekran açık", p.accent) else SoftChip("ekran kontrolü eksik", p.text3)
+    }
+    Spacer(Modifier.height(8.dp))
+    SoftText(
+        "Oran, ilk üçte birlik dilimin ortancasına göre son üçte birlik dilimin ortancasıdır. " +
+            "Düşük oran cihazın yük altında hız kıstığını gösterir; sıcaklık eğrisi bunu doğrular.",
+        size = 12,
+        color = p.text3
+    )
+}
+
 
 // ---------------------------------------------------------------------- Mikyas
 
@@ -573,7 +924,7 @@ private fun CompareView(bench: BenchController) {
             return@ScreenScroll
         }
 
-        listOf("Mikyas", "Kinetik").forEach { suite ->
+        listOf("Maraton", "Mikyas", "Kinetik").forEach { suite ->
             val mine = runs.filter { it.suite == suite }
             if (mine.isEmpty()) return@forEach
             val best = mine.maxOf { it.total }
@@ -623,6 +974,7 @@ private fun CompareView(bench: BenchController) {
                             run.gpu?.let { add("gpu ${n1(it)}") }
                             run.ux?.let { add("arayüz ${n1(it)}") }
                             run.sustained?.let { add("ısı ${n1(it)}") }
+                            run.stability?.let { add("kararlılık ${n1(it)}") }
                         }
                         if (detail.isNotEmpty()) {
                             Spacer(Modifier.height(6.dp))

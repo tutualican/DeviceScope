@@ -4,9 +4,11 @@ import android.Manifest
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
+import android.view.WindowManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import com.alican.devicescope.bench.BenchController
@@ -22,7 +24,7 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
 
         appState = AppState(applicationContext)
-        bench = BenchController(applicationContext)
+        bench = BenchController.shared(applicationContext)
 
         // Cold start: process creation -> first frame. Recorded once per process.
         LaunchMetrics.record()
@@ -32,10 +34,40 @@ class MainActivity : ComponentActivity() {
 
         setContent {
             ApplySystemBars(dark = appState.dark)
+            ApplyTestModeWindow()
             DeviceScopeApp(appState, bench)
         }
 
         askNotificationPermission()
+    }
+
+    /**
+     * Test mode keeps the panel readable and the SoC fed: the screen stays on and
+     * window brightness goes to 100 % while the marathon runs. These are window
+     * flags, so they vanish with the activity and do not leak into normal use.
+     */
+    @Composable
+    private fun ApplyTestModeWindow() {
+        val active = TestMode.active
+        DisposableEffect(active) {
+            if (active) {
+                window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+                window.attributes = window.attributes.apply {
+                    screenBrightness = WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_FULL
+                }
+            } else {
+                window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+                window.attributes = window.attributes.apply {
+                    screenBrightness = WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_NONE
+                }
+            }
+            onDispose {
+                window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+                window.attributes = window.attributes.apply {
+                    screenBrightness = WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_NONE
+                }
+            }
+        }
     }
 
     @Composable

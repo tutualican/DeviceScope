@@ -93,10 +93,25 @@ class WebServer(
             val method = parts[0]
             val target = parts[1]
 
-            // Drain headers
+            // Drain headers, remembering Content-Length so a POST body does not
+            // poison the next request on a kept-alive connection.
+            var contentLength = 0
             while (true) {
                 val line = readLine(input) ?: break
                 if (line.isEmpty()) break
+                val name = line.substringBefore(':', "").trim().lowercase()
+                if (name == "content-length") {
+                    contentLength = line.substringAfter(':', "").trim().toIntOrNull() ?: 0
+                }
+            }
+            if (contentLength in 1..65_536) {
+                val body = ByteArray(contentLength)
+                var read = 0
+                while (read < contentLength) {
+                    val n = input.read(body, read, contentLength - read)
+                    if (n <= 0) break
+                    read += n
+                }
             }
 
             val path = target.substringBefore('?')
@@ -109,8 +124,16 @@ class WebServer(
                 return
             }
 
+            val isRead = method == "GET" || method == "HEAD"
+            val isPost = method == "POST"
+
+            if (isPost && path.startsWith("/api/bench/")) {
+                handleBenchControl(client, path, params)
+                return
+            }
+
             when {
-                method != "GET" && method != "HEAD" -> {
+                !isRead -> {
                     respond(client, 405, "text/plain; charset=utf-8", "Method Not Allowed".toByteArray())
                 }
                 path == "/" || path == "/index.html" || path == "/panel" -> {
@@ -125,6 +148,14 @@ class WebServer(
                     val json = benchmarksProvider().toByteArray()
                     respond(client, 200, "application/json; charset=utf-8", json, headOnly = method == "HEAD")
                 }
+                path == "/api/bench/status" -> {
+                    val json = benchController().statusJson().toByteArray()
+                    respond(client, 200, "application/json; charset=utf-8", json, headOnly = method == "HEAD")
+                }
+                path == "/api/bench/detail" -> {
+                    val json = benchController().detailJson().toByteArray()
+                    respond(client, 200, "application/json; charset=utf-8", json, headOnly = method == "HEAD")
+                }
                 path == "/favicon.ico" -> respond(client, 204, "image/x-icon", ByteArray(0))
                 else -> respond(client, 404, "text/plain; charset=utf-8", "Not Found".toByteArray())
             }
@@ -136,6 +167,72 @@ class WebServer(
             }
         }
     }
+
+    /**
+     * Test control. These are POST-only on purpose: a link preview, a prefetch
+     * or a stray GET from the browser address bar must never start a 15 minute
+     * measurement. Every route still needs the token.
+     */
+    private fun handleBenchControl(client: Socket, path: String, params: Map<String, String>) {
+        val controller = benchController()
+        val main = android.os.Handler(android.os.Looper.getMainLooper())
+
+        when (path) {
+            "/api/bench/start" -> {
+                val minutes = (params["minutes"]?.toIntOrNull() ?: 15).coerceIn(15, 180)
+                if (controller.anyRunning) {
+                    respond(
+                        client, 409, "application/json; charset=utf-8",
+                        "{\"started\":false,\"reason\":\"already-running\"}".toByteArray()
+                    )
+                    return
+                }
+                main.post { controller.runMarathon(minutes, bringToFront = true) }
+                respond(
+                    client, 202, "application/json; charset=utf-8",
+                    "{\"started\":true,\"suite\":\"Maraton\",\"minutes\":$minutes}".toByteArray()
+                )
+            }
+            "/api/bench/quick" -> {
+                val suite = params["suite"]?.lowercase() ?: ""
+                if (suite != "mikyas" && suite != "kinetik") {
+                    respond(
+                        client, 400, "application/json; charset=utf-8",
+                        "{\"started\":false,\"reason\":\"unknown-suite\"}".toByteArray()
+                    )
+                    return
+                }
+                if (controller.anyRunning) {
+                    respond(
+                        client, 409, "application/json; charset=utf-8",
+                        "{\"started\":false,\"reason\":\"already-running\"}".toByteArray()
+                    )
+                    return
+                }
+                main.post {
+                    controller.bringAppToFront()
+                    if (suite == "mikyas") controller.runMikyas() else controller.runKinetik()
+                }
+                respond(
+                    client, 202, "application/json; charset=utf-8",
+                    "{\"started\":true,\"suite\":\"$suite\"}".toByteArray()
+                )
+            }
+            "/api/bench/cancel" -> {
+                main.post { controller.cancelMarathon() }
+                respond(
+                    client, 200, "application/json; charset=utf-8",
+                    "{\"cancelled\":true}".toByteArray()
+                )
+            }
+            else -> respond(
+                client, 404, "text/plain; charset=utf-8", "Not Found".toByteArray()
+            )
+        }
+    }
+
+    private fun benchController(): com.alican.devicescope.bench.BenchController =
+        com.alican.devicescope.bench.BenchController.shared(ctx)
 
     private fun authorized(params: Map<String, String>): Boolean {
         val fromQuery = params["k"]
@@ -211,10 +308,13 @@ code{background:#161F28;padding:2px 6px;border-radius:5px;color:#00E5A0;font-siz
     ) {
         val reason = when (status) {
             200 -> "OK"
+            202 -> "Accepted"
             204 -> "No Content"
+            400 -> "Bad Request"
             401 -> "Unauthorized"
             404 -> "Not Found"
             405 -> "Method Not Allowed"
+            409 -> "Conflict"
             else -> "OK"
         }
         val header = buildString {

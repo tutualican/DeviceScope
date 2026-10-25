@@ -136,6 +136,53 @@ canvas{width:100%;height:130px;display:block;border-radius:16px;background:rgba(
 footer{max-width:1180px;margin:0 auto;padding:34px 28px 0;font-size:11.5px;color:var(--tx4);line-height:1.8}
 .warnbar{background:rgba(255,69,58,.10);color:#FFB6BF;border:1px solid rgba(255,69,58,.22);
   border-radius:18px;padding:14px 18px;font-size:12.5px;margin-bottom:14px;display:none}
+
+/* ---------- test controls ---------- */
+.seg{display:inline-flex;gap:2px;padding:4px;border-radius:16px;
+  background:rgba(255,255,255,.05);border:1px solid var(--stroke2);margin-top:14px}
+.seg button{appearance:none;border:0;background:transparent;color:var(--tx3);font:inherit;
+  font-size:12.5px;font-weight:500;padding:8px 18px;border-radius:12px;cursor:pointer;
+  transition:background .18s ease,color .18s ease}
+.seg button:hover{color:var(--tx2)}
+.seg button.on{background:var(--surface);color:var(--tx);font-weight:600;
+  box-shadow:0 4px 14px rgba(0,0,0,.4)}
+.btnrow{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px}
+.btn{appearance:none;border:1px solid transparent;border-radius:14px;padding:11px 18px;
+  font:inherit;font-size:12.5px;font-weight:600;cursor:pointer;transition:transform .1s ease,opacity .18s ease}
+.btn:active{transform:scale(.985)}
+.btn:disabled{opacity:.45;cursor:default}
+.btn.primary{background:linear-gradient(180deg,#5AA6FF,#3C86EE);color:#fff;
+  box-shadow:0 8px 22px rgba(76,155,255,.3)}
+.btn.ghost{background:rgba(255,255,255,.06);color:var(--tx2);border-color:var(--stroke2)}
+.btn.ghost:hover{color:var(--tx)}
+.btn.danger{background:rgba(255,69,58,.14);color:#FFB6BF;border-color:rgba(255,69,58,.3)}
+.prog{height:10px;border-radius:6px;background:rgba(255,255,255,.07);overflow:hidden}
+.prog > i{display:block;height:100%;width:0;border-radius:6px;
+  background:linear-gradient(90deg,var(--ai2),var(--ai3));transition:width .5s ease}
+.livegrid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:14px}
+.livegrid .cell{background:rgba(255,255,255,.035);border:1px solid var(--stroke2);
+  border-radius:14px;padding:10px 12px}
+.livegrid .k{font-size:9.5px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--tx4)}
+.livegrid .v{font-size:16px;font-weight:700;margin-top:4px;color:var(--tx)}
+@media(max-width:520px){.livegrid{grid-template-columns:repeat(2,1fr)}}
+.chiprow{display:flex;gap:7px;flex-wrap:wrap;margin-top:12px}
+.chip.ok{color:var(--accent);background:rgba(76,155,255,.13);border-color:transparent}
+.chip.warn{color:var(--warn);background:rgba(255,214,10,.11);border-color:transparent}
+.chip.bad{color:#FFB6BF;background:rgba(255,69,58,.13);border-color:transparent}
+.hero-card{position:relative;overflow:hidden}
+.hero-card::before{content:"";position:absolute;left:22px;right:22px;top:0;height:2px;border-radius:2px;
+  background:linear-gradient(90deg,var(--ai1),var(--ai2),var(--ai3),var(--ai4));opacity:.8}
+.hero-lab{font-size:10px;font-weight:800;letter-spacing:.16em;color:var(--tx3)}
+.hero-val{font-size:64px;font-weight:700;letter-spacing:-2.6px;line-height:1.05;margin-top:8px;
+  background:linear-gradient(120deg,var(--ai1),var(--ai2) 45%,var(--ai3));
+  -webkit-background-clip:text;background-clip:text;color:transparent}
+.scorebar{display:grid;grid-template-columns:158px 1fr 62px;gap:12px;align-items:center;
+  padding:7px 0;font-size:12.5px;color:var(--tx2)}
+.scorebar .t{height:7px;border-radius:5px;background:rgba(255,255,255,.06);overflow:hidden}
+.scorebar .f{height:100%;border-radius:5px;background:linear-gradient(90deg,rgba(76,155,255,.5),var(--accent))}
+.scorebar .n{text-align:right;font-family:ui-monospace,Consolas,monospace;font-weight:700;color:var(--tx)}
+canvas.chart2{height:160px}
+td.clickable{cursor:pointer}
 </style>
 </head>
 <body>
@@ -219,9 +266,102 @@ footer{max-width:1180px;margin:0 auto;padding:34px 28px 0;font-size:11.5px;color
   <!-- ============ HISTORY ============ -->
   <section id="tab2" style="display:none"></section>
 
-  <!-- ============ BENCHMARKS ============ -->
+  <!-- ============ BENCHMARKS / TEST CONTROL ============ -->
   <section id="tab3" style="display:none">
-    <h2 class="sec">Kayıtlı Testler <span id="benchcount" style="color:var(--tx4);font-weight:600"></span></h2>
+    <h2 class="sec">Test başlat</h2>
+    <div class="grid2">
+      <div class="card">
+        <div class="ctitle">Maraton · uzun test</div>
+        <div class="note" style="padding-top:6px">Tek çekirdek, çok çekirdek, bellek, depolama, GPU,
+          ekranda görsel sahne ve ısıl kararlılık tek koşuda. Süre bir alt sınırdır:
+          seçim yalnızca hedefi belirler, test 15 dakikadan önce bitmez.</div>
+        <div class="seg" id="minsseg">
+          <button data-min="15" class="on">15 dk</button>
+          <button data-min="30">30 dk</button>
+          <button data-min="45">45 dk</button>
+        </div>
+        <div class="btnrow">
+          <button class="btn primary" id="startBtn">Maratonu başlat</button>
+          <button class="btn danger" id="stopBtn" style="display:none">Durdur</button>
+        </div>
+        <div class="chiprow">
+          <button class="btn ghost" id="quickMikyas">Hızlı Mikyas · ≈2 dk</button>
+          <button class="btn ghost" id="quickKinetik">Hızlı Kinetik · ≈80 sn</button>
+        </div>
+        <div class="note">Test başlarken telefon test moduna girer: tam ekran görsel sahne, ekran açık,
+          parlaklık %100 ve ön plan servisi. Rootsuz bir uygulama diğer uygulamaları askıya alamaz;
+          bu yüzden ekranın test boyunca açık kaldığı ayrıca kontrol edilir ve raporda yazar.</div>
+      </div>
+
+      <div class="card" id="statuscard">
+        <div class="ctitle">Canlı durum <span class="count" id="statusSuite"></span></div>
+        <div class="note" id="statusIdle">Şu an test çalışmıyor. Maratonu telefon ekranından veya
+          buradan başlatabilirsin.</div>
+        <div id="statusLive" style="display:none">
+          <div class="mono" id="statusPhase" style="font-size:15px;font-weight:600;margin-top:6px">—</div>
+          <div class="note" id="statusDetail" style="padding-top:4px"></div>
+          <div class="prog" style="margin-top:12px"><i id="statusBar"></i></div>
+          <div class="livegrid">
+            <div class="cell"><div class="k">Geçen</div><div class="v mono" id="liveElapsed">0:00</div></div>
+            <div class="cell"><div class="k">Kalan</div><div class="v mono" id="liveRemain">0:00</div></div>
+            <div class="cell"><div class="k">CPU</div><div class="v mono" id="liveCpu">—</div></div>
+            <div class="cell"><div class="k">Batarya</div><div class="v mono" id="liveBatt">—</div></div>
+            <div class="cell"><div class="k">Frekans</div><div class="v mono" id="liveFreq">—</div></div>
+            <div class="cell"><div class="k">FPS</div><div class="v mono" id="liveFps">—</div></div>
+          </div>
+          <div class="note" id="sceneNote"></div>
+        </div>
+      </div>
+    </div>
+
+    <div id="detailWrap" style="display:none">
+      <h2 class="sec">Maraton sonucu <span class="count" id="detailWhen"></span></h2>
+      <div class="card hero-card">
+        <div class="hero-lab">MARATON PUANI</div>
+        <div class="hero-val mono" id="heroTotal">—</div>
+        <div class="note" id="heroSub" style="padding-top:8px"></div>
+        <div class="chiprow" id="heroChips"></div>
+      </div>
+
+      <div class="grid2">
+        <div class="card">
+          <div class="ctitle">Bileşen puanları</div>
+          <div id="scoreRows"></div>
+          <div class="note">Ağırlıklı ortalama; eksik bileşen varsa kalan ağırlıklar normalize edilir.
+            Puanlar ölçülen hızın sabit referansa oranıdır (1000 = referans).</div>
+        </div>
+        <div class="card">
+          <div class="ctitle">Isıl kararlılık</div>
+          <div id="stabBody"></div>
+        </div>
+      </div>
+
+      <div class="grid2">
+        <div class="card">
+          <div class="ctitle">Sürdürülen hız indeksi</div>
+          <canvas id="chartSpeed" class="chart2"></canvas>
+          <div class="note" id="speedNote"></div>
+        </div>
+        <div class="card">
+          <div class="ctitle">Sıcaklık eğrisi</div>
+          <canvas id="chartTemp" class="chart2"></canvas>
+          <div class="note" id="tempNote"></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="ctitle">Sistem izleme</div>
+        <div id="monitorBody"></div>
+        <details class="more"><summary>Doğrulama ve sınırlar</summary>
+          <div id="verifyBody"></div>
+        </details>
+        <div class="btnrow">
+          <button class="btn ghost" id="downloadBtn">JSON indir</button>
+        </div>
+      </div>
+    </div>
+
+    <h2 class="sec">Kayıtlı testler <span class="count" id="benchcount"></span></h2>
     <div class="card" style="padding:10px 14px" id="benchcard">
       <table>
         <thead><tr>
@@ -231,9 +371,9 @@ footer{max-width:1180px;margin:0 auto;padding:34px 28px 0;font-size:11.5px;color
         <tbody id="benchrows"></tbody>
       </table>
     </div>
-    <div class="note" id="benchnote">Test sekmesinde Mikyas veya Kinetik çalıştırıldığında sonuçlar
-      burada listelenir. Puanlar ölçülen hızın sabit referansa oranıdır (1000 = referans);
-      ham metrikler telefon ekranındaki ayrıntı sayfasındadır.</div>
+    <div class="note" id="benchnote">Bütün koşular cihazın kendi deposunda JSON olarak tutulur.
+      Puanlar ölçülen hızın sabit referansa oranıdır (1000 = referans); ham metrikler,
+      sıcaklık serisi ve doğrulama kayıtları sonuç kartında görünür.</div>
   </section>
 
   <footer>
@@ -517,10 +657,22 @@ footer{max-width:1180px;margin:0 auto;padding:34px 28px 0;font-size:11.5px;color
   }
 
   // --------------------------------------------------------------- benchmarks
+  var mins = 15;
+  var lastRunning = false;
+  var detailData = null;
+
   function fmtScore(v){
-    return (v === null || v === undefined) ? "—" : Number(v).toFixed(1);
+    return (v === null || v === undefined || !isFinite(v)) ? "—" : Number(v).toFixed(1);
+  }
+  function fmtClock(sec){
+    sec = Math.max(0, Math.round(sec || 0));
+    var m = Math.floor(sec / 60), s = sec % 60;
+    return m + ":" + (s < 10 ? "0" : "") + s;
   }
   function benchDetail(r){
+    if (r.suite === "Maraton"){
+      return "7 bileşen · kararlılık " + fmtScore(r.stability);
+    }
     if (r.suite === "Kinetik"){
       return "GPU " + fmtScore(r.gpu) + " · UX " + fmtScore(r.ux) + " · ısı " + fmtScore(r.sustained);
     }
@@ -549,11 +701,320 @@ footer{max-width:1180px;margin:0 auto;padding:34px 28px 0;font-size:11.5px;color
     tbody.innerHTML = html;
   }
   function loadBenchmarks(){
-    fetch("/api/benchmarks?k=" + encodeURIComponent(TOKEN), {cache:"no-store"})
+    fetch(apiUrl("/api/benchmarks"), {cache:"no-store"})
       .then(function(r){ if (!r.ok) throw new Error("HTTP " + r.status); return r.json(); })
       .then(function(d){ renderBenchmarks(d.runs || []); })
       .catch(function(){});
   }
+
+  // ------------------------------------------------------------ test control
+  function apiUrl(path){
+    return path + (path.indexOf("?") >= 0 ? "&" : "?") + "k=" + encodeURIComponent(TOKEN);
+  }
+  function postApi(path){
+    return fetch(apiUrl(path), {method:"POST", cache:"no-store"}).then(function(r){
+      return r.json().catch(function(){ return {}; }).then(function(j){
+        if (!r.ok) throw new Error(j.reason || ("HTTP " + r.status));
+        return j;
+      });
+    });
+  }
+
+  function setStartBusy(text){
+    $("startBtn").disabled = true;
+    $("startBtn").textContent = text;
+  }
+  function clearStartBusy(){
+    $("startBtn").disabled = false;
+    $("startBtn").textContent = "Maratonu başlat";
+  }
+
+  $("startBtn").addEventListener("click", function(){
+    setStartBusy("Başlatılıyor…");
+    postApi("/api/bench/start?minutes=" + mins)
+      .then(function(){ setTimeout(pollStatus, 600); })
+      .catch(function(e){ alert("Test başlatılamadı: " + e.message); });
+    setTimeout(clearStartBusy, 1800);
+  });
+
+  $("stopBtn").addEventListener("click", function(){
+    $("stopBtn").disabled = true;
+    postApi("/api/bench/cancel")
+      .catch(function(e){ alert("Durdurulamadı: " + e.message); })
+      .then(function(){ $("stopBtn").disabled = false; setTimeout(pollStatus, 600); });
+  });
+
+  Array.prototype.forEach.call(document.querySelectorAll("#minsseg button"), function(b){
+    b.addEventListener("click", function(){
+      mins = parseInt(b.getAttribute("data-min"), 10) || 15;
+      Array.prototype.forEach.call(document.querySelectorAll("#minsseg button"), function(x){
+        x.classList.toggle("on", x === b);
+      });
+    });
+  });
+
+  function quick(suite){
+    postApi("/api/bench/quick?suite=" + encodeURIComponent(suite))
+      .catch(function(e){ alert("Test başlatılamadı: " + e.message); });
+    setTimeout(pollStatus, 600);
+  }
+  $("quickMikyas").addEventListener("click", function(){ quick("mikyas"); });
+  $("quickKinetik").addEventListener("click", function(){ quick("kinetik"); });
+
+  function renderStatus(s){
+    var running = !!s.running;
+    var isMarathon = running && s.suite === "Maraton";
+
+    $("statusSuite").textContent = running ? "· " + (s.suite || "") : "";
+    $("statusIdle").style.display = running ? "none" : "block";
+    $("statusLive").style.display = running ? "block" : "none";
+    $("startBtn").style.display = running ? "none" : "inline-block";
+    $("stopBtn").style.display = isMarathon ? "inline-block" : "none";
+
+    if (!running){
+      if (lastRunning){
+        loadBenchmarks();
+        loadDetail();
+      }
+      lastRunning = false;
+      return;
+    }
+    lastRunning = true;
+
+    $("statusPhase").textContent = s.phase || "Ölçülüyor";
+    $("statusDetail").textContent = s.detail || "";
+    $("statusBar").style.width = Math.round((s.progress || 0) * 1000) / 10 + "%";
+    $("liveElapsed").textContent = fmtClock(s.elapsedSeconds);
+    $("liveRemain").textContent = s.suite === "Maraton" ? fmtClock(s.remainingSeconds) : "—";
+    var live = s.live || {};
+    $("liveCpu").textContent = (live.cpu === null || live.cpu === undefined) ? "—" : Number(live.cpu).toFixed(1) + "°";
+    $("liveBatt").textContent = (live.battery === null || live.battery === undefined) ? "—" : Number(live.battery).toFixed(1) + "°";
+    $("liveFreq").textContent = (live.freqMhz > 0) ? (live.freqMhz + " MHz") : "—";
+    $("liveFps").textContent = (s.scene && live.fps > 0) ? Number(live.fps).toFixed(0) : "—";
+    $("sceneNote").textContent = s.scene
+      ? "Görsel sahne çalışıyor: bu kareler arayüz puanının doğrudan kaynağı."
+      : "Görsel sahne yalnızca sahne aşamasında çalışır; CPU aşamalarında kare istenmez.";
+  }
+
+  function pollStatus(){
+    fetch(apiUrl("/api/bench/status"), {cache:"no-store"})
+      .then(function(r){ if (!r.ok) throw new Error("HTTP " + r.status); return r.json(); })
+      .then(renderStatus)
+      .catch(function(){});
+  }
+
+  // ------------------------------------------------------------------ detail
+  var SCORE_ROWS = [
+    ["Tek çekirdek · %18", "single", 3000],
+    ["Çok çekirdek · %22", "multi", 3000],
+    ["Bellek · %8", "memory", 3000],
+    ["Depolama · %8", "storage", 3000],
+    ["GPU · %20", "gpu", 3000],
+    ["Görsel / arayüz · %12", "ux", 1500],
+    ["Kararlılık · %12", "stability", 1200]
+  ];
+
+  function kvRow(label, value, cls){
+    return '<div class="kv"><div class="k">' + esc(label) + '</div><div class="v mono ' +
+      (cls || "") + '">' + esc(value) + "</div></div>";
+  }
+
+  function retentionClass(v){
+    if (v === null || v === undefined) return "tna";
+    if (v >= 90) return "t1";
+    if (v >= 80) return "t2";
+    return "t4";
+  }
+
+  function renderDetail(d){
+    detailData = d;
+    if (!d || d.available === false || d.suite !== "Maraton"){
+      $("detailWrap").style.display = "none";
+      return;
+    }
+    $("detailWrap").style.display = "block";
+    $("detailWhen").textContent = new Date(d.timestamp).toLocaleString("tr-TR");
+    $("heroTotal").textContent = fmtScore(d.scores.total);
+
+    var scores = d.scores || {};
+    var stab = d.stability || {};
+    var ver = d.verification || {};
+    var rounds = d.rounds || [];
+    var dur = Math.round(d.durationSeconds || 0);
+
+    $("heroSub").textContent = (d.device || "—") + " · hedef " + (d.targetMinutes || 15) +
+      " dk · gerçekleşen " + Math.floor(dur / 60) + " dk " + (dur % 60) + " sn · " +
+      rounds.length + " sürdürülen tur · " + (d.cores || "—") + " çekirdek · " + (d.abi || "—");
+
+    var chips = [];
+    chips.push(ver.passed
+      ? '<span class="chip ok">bilinen-cevap geçti</span>'
+      : '<span class="chip bad">doğrulama hatası</span>');
+    if (stab.retentionPercent !== null && stab.retentionPercent !== undefined){
+      chips.push('<span class="chip ' + (stab.throttled ? "warn" : "ok") + '">hız koruma %' +
+        Number(stab.retentionPercent).toFixed(1) + "</span>");
+    }
+    if (ver.screenKeptOn){
+      chips.push('<span class="chip ok">ekran açık kaldı</span>');
+    } else if (ver.screenChecks > 0){
+      chips.push('<span class="chip bad">ekran kapandı (' + ver.screenOffChecks + "/" + ver.screenChecks + ")</span>");
+    }
+    var gpu = d.gpu || {};
+    if (gpu.api) chips.push('<span class="chip">' + esc(gpu.api) + "</span>");
+    $("heroChips").innerHTML = chips.join("");
+
+    var rows = "";
+    for (var i = 0; i < SCORE_ROWS.length; i++){
+      var def = SCORE_ROWS[i];
+      var v = scores[def[1]];
+      var w = (v === null || v === undefined) ? 0 : Math.max(0, Math.min(100, v / def[2] * 100));
+      rows += '<div class="scorebar"><div>' + esc(def[0]) + "</div>" +
+        '<div class="t"><div class="f" style="width:' + w + '%"></div></div>' +
+        '<div class="n">' + fmtScore(v) + "</div></div>";
+    }
+    $("scoreRows").innerHTML = rows;
+
+    var sb = "";
+    sb += kvRow("Hız koruma", (stab.retentionPercent === null || stab.retentionPercent === undefined)
+      ? "yetersiz örnek" : "%" + Number(stab.retentionPercent).toFixed(1),
+      retentionClass(stab.retentionPercent));
+    sb += kvRow("Sürdürülen sapma (CV)", fmtScore(stab.cvPercent) + " %",
+      (stab.cvPercent <= 2 ? "t1" : stab.cvPercent <= 5 ? "t2" : "t4"));
+    sb += kvRow("Sıcaklık başlangıç → tepe → bitiş",
+      fmtTemp(stab.startTempC) + "° → " + fmtTemp(stab.peakTempC) + "° → " + fmtTemp(stab.endTempC) + "°",
+      tempClass(stab.peakTempC));
+    sb += kvRow("Sürdürülen tur", String(stab.rounds || rounds.length));
+    sb += kvRow("Bileşen ağırlıkları", "18 / 22 / 8 / 8 / 20 / 12 / 12");
+    sb += '<div class="note">Kararlılık = 1000 × (son üçte bir ortancası / ilk üçte bir ortancası) × ' +
+      "(1 − sürdürülen CV). %100 koruma ve sıfır sapma 1000 puandır; 1100 ile sınırlanır.</div>";
+    $("stabBody").innerHTML = sb;
+
+    var speed = rounds.filter(function(r){ return r.index !== null && r.index > 0; })
+      .map(function(r){ return [r.t, r.index]; });
+    drawChart2("chartSpeed", [{data: speed, color: "#4C9BFF"}], "");
+    var mon = d.monitor || {};
+    $("speedNote").textContent = rounds.length
+      ? "Dönüşümlü tek/çok çekirdek turları · " + rounds.length + " tur · tepe " +
+        fmtScore(mon.freqMaxMhz) + " MHz"
+      : "Sürdürülen tur kaydı yok.";
+
+    var cpuSeries = (d.temps || []).map(function(p){ return [p[0], p[1]]; });
+    var battSeries = rounds.filter(function(r){ return r.battery !== null && r.battery !== undefined; })
+      .map(function(r){ return [r.t, r.battery]; });
+    drawChart2("chartTemp", [
+      {data: cpuSeries, color: "#FF9F0A"},
+      {data: battSeries, color: "#64D2FF"}
+    ], "°C");
+    $("tempNote").innerHTML = '<span style="color:var(--orange)">CPU</span> · ' +
+      '<span style="color:var(--cool)">batarya</span> · test boyunca yaklaşık saniyede bir okunur. ' +
+      "Sensör yoksa çizgi boş kalır.";
+
+    var mob = "";
+    mob += kvRow("CPU sıcaklığı", fmtTemp(mon.cpuMinC) + "° → " + fmtTemp(mon.cpuPeakC) + "°", tempClass(mon.cpuPeakC));
+    mob += kvRow("Batarya sıcaklığı", fmtTemp(mon.batteryPeakC) + "°", tempClass(mon.batteryPeakC));
+    mob += kvRow("Çekirdek frekansı", (mon.freqMinMhz && mon.freqMaxMhz)
+      ? mon.freqMinMhz + " – " + mon.freqMaxMhz + " MHz" : "—");
+    mob += kvRow("Batarya seviyesi", (mon.batteryStart !== null && mon.batteryEnd !== null)
+      ? mon.batteryStart + "% → " + mon.batteryEnd + "%" : "—");
+    mob += kvRow("Örnek sayısı", String(mon.sampleCount || 0) + " sıcaklık örneği");
+    $("monitorBody").innerHTML = mob;
+
+    var vb = "";
+    vb += kvRow("Bilinen-cevap testleri", ver.passed ? "tümü geçti" : "başarısız: " + (ver.failedWorkloads || []).join(", "),
+      ver.passed ? "t1" : "t4");
+    vb += kvRow("Sağlama toplamı", ver.checksumsStable ? "eşleşti" : "EŞLEŞMEDİ", ver.checksumsStable ? "t1" : "t4");
+    vb += kvRow("Ekran kontrolü", (ver.screenChecks > 0)
+      ? (ver.screenKeptOn ? "açık kaldı (" + ver.screenChecks + " kontrol)" : "kapandı (" + ver.screenOffChecks + "/" + ver.screenChecks + ")")
+      : "kontrol edilemedi", ver.screenKeptOn ? "t1" : (ver.screenChecks > 0 ? "t4" : "tna"));
+    vb += '<div class="note">Ortam sıcaklığı sabitlenemez; diğer uygulamalar rootsuz askıya alınamaz. ' +
+      "Bu puanlar Geekbench veya AnTuTu'nun kendi puanları değildir: aynı iş yükü sınıflarını " +
+      "kendi referans sabitlerimizle ölçen bağımsız endekslerdir. GPU sürücüsü Vulkan'ı reddederse " +
+      "GLES 3.1 yedek yolu kullanılır ve raporda yazar.</div>";
+    $("verifyBody").innerHTML = vb;
+  }
+
+  function loadDetail(){
+    fetch(apiUrl("/api/bench/detail"), {cache:"no-store"})
+      .then(function(r){ if (!r.ok) throw new Error("HTTP " + r.status); return r.json(); })
+      .then(renderDetail)
+      .catch(function(){});
+  }
+
+  $("downloadBtn").addEventListener("click", function(){
+    if (!detailData) return;
+    var blob = new Blob([JSON.stringify(detailData, null, 2)], {type: "application/json"});
+    var a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = "devicescope-maraton-" + detailData.timestamp + ".json";
+    document.body.appendChild(a); a.click();
+    setTimeout(function(){ URL.revokeObjectURL(a.href); a.remove(); }, 1000);
+  });
+
+  /**
+   * Small line chart. Series are [x, y] pairs; x is seconds, y is the measured
+   * value. Nothing is smoothed: the polyline is the recorded data.
+   */
+  function drawChart2(id, series, suffix){
+    var c = $(id);
+    if (!c) return;
+    var dpr = window.devicePixelRatio || 1;
+    var w = c.clientWidth, h = c.clientHeight;
+    if (!w || !h) return;
+    c.width = Math.floor(w * dpr); c.height = Math.floor(h * dpr);
+    var ctx = c.getContext("2d");
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, w, h);
+
+    var all = [];
+    series.forEach(function(s){ s.data.forEach(function(p){ if (p[1] !== null && isFinite(p[1])) all.push(p); }); });
+    if (!all.length){
+      ctx.fillStyle = "#4E6070"; ctx.font = "11px sans-serif";
+      ctx.fillText("Kayıt yok", 10, h / 2);
+      return;
+    }
+    var x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity;
+    all.forEach(function(p){
+      if (p[0] < x0) x0 = p[0];
+      if (p[0] > x1) x1 = p[0];
+      if (p[1] < y0) y0 = p[1];
+      if (p[1] > y1) y1 = p[1];
+    });
+    if (!(x1 > x0)) x1 = x0 + 1;
+    var yPad = (y1 - y0) * 0.14 || Math.max(1, y1 * 0.1);
+    y0 = Math.max(0, y0 - yPad); y1 = y1 + yPad;
+
+    var pl = 34, pr = 8, pt = 10, pb = 18;
+    var iw = w - pl - pr, ih = h - pt - pb;
+    function px(v){ return pl + (v - x0) / (x1 - x0) * iw; }
+    function py(v){ return pt + (1 - (v - y0) / (y1 - y0)) * ih; }
+
+    ctx.strokeStyle = "rgba(34,48,61,.75)"; ctx.lineWidth = 1;
+    ctx.fillStyle = "#4E6070"; ctx.font = "9px ui-monospace,Consolas,monospace";
+    for (var g = 0; g <= 3; g++){
+      var yy = pt + ih * g / 3;
+      ctx.beginPath(); ctx.moveTo(pl, yy); ctx.lineTo(w - pr, yy); ctx.stroke();
+      var val = y1 - (y1 - y0) * g / 3;
+      ctx.fillText((val >= 100 ? Math.round(val) : val.toFixed(1)) + suffix, 2, yy + 3);
+    }
+    ctx.fillText(fmtClock(x0), pl, h - 4);
+    var endLabel = fmtClock(x1);
+    ctx.fillText(endLabel, w - pr - ctx.measureText(endLabel).width, h - 4);
+
+    series.forEach(function(s){
+      ctx.beginPath(); ctx.strokeStyle = s.color; ctx.lineWidth = 1.8;
+      ctx.lineJoin = "round"; ctx.lineCap = "round";
+      var started = false;
+      s.data.forEach(function(p){
+        if (p[1] === null || !isFinite(p[1])){ started = false; return; }
+        var x = px(p[0]), y = py(p[1]);
+        if (!started){ ctx.moveTo(x, y); started = true; } else ctx.lineTo(x, y);
+      });
+      ctx.stroke();
+    });
+  }
+
+  /** Detail view survives a page reload: the newest marathon is on the phone. */
+  setTimeout(loadDetail, 900);
 
   // ------------------------------------------------------------------- tabs
   document.querySelector("nav").addEventListener("click", function(e){
@@ -570,7 +1031,7 @@ footer{max-width:1180px;margin:0 auto;padding:34px 28px 0;font-size:11.5px;color
     $("tab2").style.display = idx === 2 ? "block" : "none";
     $("tab3").style.display = idx === 3 ? "block" : "none";
     if (idx === 1) drawChart();
-    if (idx === 3) loadBenchmarks();
+    if (idx === 3) { loadBenchmarks(); loadDetail(); pollStatus(); }
     window.scrollTo({top:0, behavior:"smooth"});
   });
 
@@ -580,11 +1041,16 @@ footer{max-width:1180px;margin:0 auto;padding:34px 28px 0;font-size:11.5px;color
   }
   setInterval(tick, 1000); tick();
 
-  window.addEventListener("resize", function(){ drawChart(); });
+  window.addEventListener("resize", function(){
+    drawChart();
+    if (detailData) renderDetail(detailData);
+  });
 
   load();
   setInterval(load, 2500);
   setInterval(loadBenchmarks, 15000);
+  setInterval(pollStatus, 1200);
+  pollStatus();
 })();
 </script>
 </body>

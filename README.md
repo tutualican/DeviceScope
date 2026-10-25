@@ -1,11 +1,12 @@
 # DeviceScope
 
 Android cihazın donanım bilgilerini, canlı sıcaklıklarını, erişilebilen geçmiş
-kayıtlarını ve iki bağımsız performans testini gösteren; aynı Wi-Fi ağındaki
-laptop tarayıcısından izlenebilen uygulama.
+kayıtlarını ve üç bağımsız performans testini (Mikyas, Kinetik, Maraton) gösteren;
+aynı Wi-Fi ağındaki laptop tarayıcısından izlenebilen ve **test başlatılabilen**
+uygulama.
 
 **Depo:** https://github.com/tutualican/DeviceScope
-**Sürüm:** v1.0.0 · APK sürüm ekinde (`DeviceScope.apk`, debug imzalı)
+**Sürüm:** v1.1.0 · APK sürüm ekinde (`DeviceScope.apk`, debug imzalı)
 
 Yerel kopya: `C:\Users\Alican\Desktop\DeviceScope.apk`
 
@@ -31,7 +32,7 @@ setini kullanır (koyu, yüzen pill navigasyon, aynı gölge ve yarıçap ölçe
 | Sıcaklık | En sıcak bileşen manşette; işlemci / batarya / hissedilen için üç halka; bileşen maksimumları, çekirdek frekansları ve ham sensör tablosu katlanmış kartlarda |
 | Geçmiş | İlk açılış, son önyükleme, ROM/çekirdek derleme tarihleri, pil döngüsü ve kapasite kaybı, panel üretim haftası (EDID varsa), çalışma süresi |
 | Uzaktan | Telefon içinde çalışan HTTP sunucusu + tarayıcı paneli; adres, kopyala/paylaş ve tek ana düğme |
-| Test | Dört segment: **Mikyas** (CPU/bellek/disk), **Kinetik** (GPU/arayüz/ısıl dayanım), **Kıyas** (kayıtlı sonuçlar), **Doğrulama** (ölçümün kendisini sınayan paket) |
+| Test | Beş segment: **Maraton** (≥15 dk birleşik uzun koşu), **Mikyas** (CPU/bellek/disk), **Kinetik** (GPU/arayüz/ısıl dayanım), **Kıyas** (kayıtlı sonuçlar), **Doğrulama** (ölçümün kendisini sınayan paket) |
 
 Her test sonucu tek bir manşet kartla açılır: gradyan halka içinde puan, altında
 tek cümlelik özet ve doğrulama rozeti. Kategori çubukları açık gelir; ölçüm
@@ -86,6 +87,37 @@ cache dizininde 128 MB gerçek yazma (`fsync` ile) + okuma yapar.
 - **Paylaşım:** sonuç, uygulamanın kendi Canvas'ı ile 1080×1350 PNG karta çizilir
   ve `FileProvider` üzerinden paylaşılır (metin paylaşımı da var).
 
+### Maraton — uzun süreli birleşik koşu
+
+Tek koşuda Geekbench tarzı tek/çok çekirdek, bellek, depolama, Vulkan GPU,
+ekranda AnTuTu tarzı görsel sahne ve ısıl kararlılık ölçülür.
+
+- **Süre bir alt sınırdır.** 15/30/45 dk seçilir; motor `coerceAtLeast(15)`
+  uygular ve sürdürülen döngü duvar saati hedefe ulaşana kadar devam eder.
+  15 dakikadan kısa bir koşu üretilemez.
+- **Sıra:** doğrulama → tek çekirdek (7 iş yükü) → çok çekirdek → bellek → 128 MB
+  depolama → Vulkan compute + çevrimdışı sahne → ekranda görsel sahne (20 sn,
+  gerçek kareler) → dönüşümlü tek/çok çekirdek sürdürülen döngü (kalan süre,
+  tipik olarak ~12 dk) → rapor.
+- **Toplam** = yedi bileşenin ağırlıklı ortalaması: tek 0,18 · çok 0,22 ·
+  bellek 0,08 · depolama 0,08 · GPU 0,20 · görsel/arayüz 0,12 · kararlılık 0,12.
+  Bir bileşen ölçülemezse o ağırlık düşer, kalanlar normalize edilir; eksik
+  bileşen sıfır puan gibi sayılmaz.
+- **Kararlılık** = `1000 × (son üçte bir ortancası / ilk üçte bir ortancası) ×
+  (1 − sürdürülen ölçümlerin CV'si)`; en az 6 sürdürülen örnek gerekir ve sonuç
+  0–1100 aralığına sıkıştırılır. %100 koruma + sıfır sapma = 1000.
+- **Kayıt:** `filesDir/results/maraton_<zaman>.json` — tüm bileşen ölçümleri,
+  sürdürülen tur serisi, sıcaklık serisi, monitör özeti, doğrulama, sağlama
+  toplamı ve ekran kontrolü. Tarayıcı paneli bu dosyayı çizelgelere döker.
+- **Test modu:** koşu başlarken uygulama tam ekran test moduna girer: görsel
+  sahne, ekran açık, pencere parlaklığı %100, ön plan servisi ve durdurma
+  düğmeli bildirim. Rootsuz bir uygulama **diğer uygulamaları askıya alamaz**;
+  bu yüzden ekranın açık kaldığı her sürdürülen turda (~2,5 sn)
+  `PowerManager.isInteractive` ile kontrol edilir ve rapora yazılır. Telefon
+  kilitliyse veya başka bir uygulama öndeyse görsel sahne kare üretemez: kod
+  zaman aşımıyla bunu algılar, sahneyi "ölçülemedi" işaretler ve puan uydurmaz
+  (arayüz puanı sayısal kare ölçümüne düşer, o da yoksa bileşen eksik sayılır).
+
 ## Güvenilirlik hakkında dürüst notlar
 
 - **Ham metrikler asıl kanıttır:** her satırda MB/s, GFLOP/s, Mpix/s, Mray/s,
@@ -112,6 +144,28 @@ cache dizininde 128 MB gerçek yazma (`fsync` ile) + okuma yapar.
 Sunucu, VPS, abonelik, internet trafiği yok. Veri cihazdan çıkmaz. Her istek
 16 haneli anahtarı ister; anahtarsız istek 401 döner. Tarayıcı paneli de aynı
 Soft UI dilinde (koyu neumorphism) tasarlandı.
+
+### Tarayıcıdan test başlatma
+
+**Testler** sekmesinden 15/30/45 dk maraton veya hızlı Mikyas/Kinetik
+başlatılabilir; canlı aşama, kalan süre, CPU/batarya sıcaklığı, frekans ve fps
+aynı kartta akar. Koşu bitince bileşen puanları, kararlılık, sıcaklık eğrisi,
+sürdürülen hız indeksi ve kayıtlı testler panelde görünür.
+
+Kontrol uçları **yalnızca POST** kabul eder ve her istek anahtar ister; bir
+bağlantı önizlemesi veya adres çubuğu kazara 15 dakikalık test başlatamaz.
+
+| Uç | Yöntem | İş |
+|---|---|---|
+| `/api/bench/start?minutes=15` | POST | Maraton başlat (süre en az 15 dk) |
+| `/api/bench/quick?suite=mikyas` | POST | Hızlı test (mikyas/kinetik) |
+| `/api/bench/cancel` | POST | Koşuyu durdur |
+| `/api/bench/status` | GET | Aşama, yüzde, geçen/kalan süre, canlı sıcaklık/frekans/fps |
+| `/api/bench/detail` | GET | Son maratonun tam JSON'u |
+
+Telefonun kilidi açık ve DeviceScope açıkken başlatın: Android, arka plandaki bir
+uygulamanın izinsiz olarak ekranı öne getirmesini engeller. Koşu yine çalışır,
+ancak görsel sahne kare üretemezse bu durum raporda açıkça yazılır.
 
 ## Etiketler
 
@@ -152,6 +206,12 @@ Doğrulandı:
 - AES algoritması (C++ ile birebir aynı adımlar) FIPS-197 C.1 vektörünü
   (`69c4e0d86a7b0430d8cdb78070b4c55a`) üretti.
 - Tarayıcı panelinin JS'i `node --check` ile sözdizimi doğrulandı.
+- Maraton süre alt sınırı (istenen 1/5/14/−30 dk → 15 dk), ağırlık toplamı,
+  ağırlıklı ortalama ve eksik bileşen normalizasyonu `MarathonConfigTest` ile
+  sınandı; 26 birim testinin tamamı geçiyor.
+- Derlenen APK'da `TestModeService` `foregroundServiceType=specialUse` olarak
+  manifestte, maraton kontrol uçları ve test arayüzü `assets/panel.html`
+  içinde; yeni Kotlin/JSON dosyalarında U+FFFD veya mojibake yok.
 
 Doğrulanmadı (bu makinede mümkün değil — x86_64 emülatör için AEHD/WHPX yok,
 yönetici yetkisi yok, bağlı telefon yok):
@@ -161,6 +221,11 @@ yönetici yetkisi yok, bağlı telefon yok):
 - Vulkan aygıt/komut zincirinin gerçek bir sürücüde hatasız çalışması; her adım
   `VkResult` kontrolüyle korunuyor ve başarısızlıkta GLES'e düşüyor, ama bu
   makinede çalıştırılarak kanıtlanamadı.
+- **Maraton'un 15 dakikalık gerçek koşusu**: süre alt sınırı, ağırlıklar ve
+  kararlılık formülü kodla ve birim testleriyle doğrulandı; ancak bu makinede
+  (hızlandırmasız emülatör, bağlı telefon yok) 15 dakikalık saha koşusu
+  çalıştırılamadı. Görsel sahnenin gerçek kare üretmesi ve telefonun test
+  modunda ekranı açık tutması da cihaz üzerinde teyit edilmedi.
 
 ## Doğrulama paketi (Test → Doğrulama)
 
@@ -207,8 +272,9 @@ Aynı formülün Python sürümü `tools/verify_scoring.py` dosyasında
 Python betiği burada çalıştırılamadı; aynı kontroller PowerShell ikiziyle
 çalıştırıldı ve geçti. Kotlin tarafı da
 `app/src/test/.../ScoringVerificationTest.kt` ile bağımsız hesaplanmış değerlere
-karşı sınanıyor (12 test), CSV eşleme/Spearman için `CrossDeviceTest.kt` (7 test);
-toplam 19 test `:app:testDebugUnitTest` ile geçiyor.
+karşı sınanıyor (12 test), CSV eşleme/Spearman için `CrossDeviceTest.kt` (7 test)
+ve 15 dakika alt sınırı/ağırlık normalizasyonu için `MarathonConfigTest.kt`
+(7 test); toplam 26 test `:app:testDebugUnitTest` ile geçiyor.
 
 Doğrulanan sayısal sonuçlar (bu makinede):
 
@@ -230,8 +296,11 @@ Doğrulanan sayısal sonuçlar (bu makinede):
 - **Geekbench/AnTuTu Spearman korelasyonu**: aynı cihazların hem referans hem
   DeviceScope puanı gerekir. Tek cihazda n=1 olduğundan Spearman tanımsızdır;
   en az 5–8 cihazlık CSV gerekir.
-- **15 dakikalık ısıl dayanıklılık koşusu** ve **Kinetik 10 tam koşu**: ayrı,
-  uzun süreli testler; bu doğrulama paketinin içinde değil.
+- **15 dakikalık ısıl dayanıklılık koşusu**: artık **Maraton** paketinin
+  içindedir (motor süreyi alt sınır olarak uygular), ama bu makinede 15 dakikalık
+  gerçek bir koşu çalıştırılamadı; süre garantisi kodla ve birim testleriyle
+  sınanıyor, saha ölçümüyle değil. **Kinetik 10 tam koşu** da ayrı bir saha
+  çalışmasıdır; bu doğrulama paketinin içinde değil.
 - Depolama testi 64 MB dosya kullanır (RAM'den büyük değil); sayfa önbelleği
   O_DIRECT ile atlanır ve iki sonuç ayrı raporlanır.
 

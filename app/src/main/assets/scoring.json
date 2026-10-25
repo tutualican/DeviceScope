@@ -1,5 +1,5 @@
 {
-  "version": 2,
+  "version": 3,
   "description": "DeviceScope bileşik puan ağırlıkları. Toplam ağırlık 1.00 olmak zorunda değil; eksik grup varsa kalan ağırlıklar yeniden normalize edilir.",
   "weights": {
     "cpu": 0.40,
@@ -12,5 +12,23 @@
     "gpu": ["gpu"],
     "memory": ["memory", "storage"],
     "ux": ["ux"]
+  },
+  "marathon": {
+    "description": "Maraton toplam puanı: yedi bileşenin ağırlıklı ortalaması. Ağırlıklar toplamı 1.00. Eksik bileşen varsa kalan ağırlıklar yeniden normalize edilir.",
+    "weights": {
+      "single": 0.18,
+      "multi": 0.22,
+      "memory": 0.08,
+      "storage": 0.08,
+      "gpu": 0.20,
+      "ux": 0.12,
+      "stability": 0.12
+    }
+  },
+  "stability": {
+    "description": "Kararlılık puanı = 1000 x (son üçte bir ortalaması / ilk üçte bir ortalaması) x (1 - sürdürülen ölçümlerin CV'si). 1000 = hiç hız kaybetmedi ve sapma yok. 1100 ile sınırlanır.",
+    "retentionFloor": 0.0,
+    "retentionCeiling": 1.10,
+    "throttleWarningPercent": 85.0
   }
 }

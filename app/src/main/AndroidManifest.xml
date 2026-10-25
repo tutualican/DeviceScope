@@ -51,5 +51,14 @@
                 android:value="Local device telemetry HTTP server for the owner's browser on the same network." />
         </service>
 
+        <service
+            android:name=".TestModeService"
+            android:exported="false"
+            android:foregroundServiceType="specialUse">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="Long-running device benchmark test mode: keeps the screen awake and the process in the foreground while a user-started measurement runs." />
+        </service>
+
     </application>
 </manifest>
