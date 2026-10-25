@@ -25,7 +25,15 @@ data class MonitorSamples(
     val cpuTemps: List<Float> = emptyList(),
     val batteryTemps: List<Float> = emptyList(),
     val freqMhz: List<Long> = emptyList(),
-    val batteryPercent: List<Int> = emptyList()
+    val batteryPercent: List<Int> = emptyList(),
+    /** Wall clock of each CPU-temperature sample; aligned with [cpuTemps]. */
+    val timestamps: List<Long> = emptyList(),
+    /** Arithmetic mean of the CPU zones, next to the hottest-zone series. */
+    val cpuAvgTemps: List<Float> = emptyList(),
+    /** PowerManager thermal status at each CPU-temperature sample. */
+    val thermalStatuses: List<Int> = emptyList(),
+    /** PowerManager thermal headroom at each CPU-temperature sample. */
+    val headrooms: List<Float> = emptyList()
 ) {
     val peakCpu: Float? get() = cpuTemps.maxOrNull()
     val minCpu: Float? get() = cpuTemps.minOrNull()
@@ -103,6 +111,10 @@ class SystemMonitor(private val context: Context) {
     private val batteryTemps = java.util.Collections.synchronizedList(ArrayList<Float>())
     private val freqs = java.util.Collections.synchronizedList(ArrayList<Long>())
     private val battery = java.util.Collections.synchronizedList(ArrayList<Int>())
+    private val times = java.util.Collections.synchronizedList(ArrayList<Long>())
+    private val cpuAvg = java.util.Collections.synchronizedList(ArrayList<Float>())
+    private val statuses = java.util.Collections.synchronizedList(ArrayList<Int>())
+    private val headrooms = java.util.Collections.synchronizedList(ArrayList<Float>())
 
     fun start() {
         if (job != null) return
@@ -114,7 +126,14 @@ class SystemMonitor(private val context: Context) {
             while (System.currentTimeMillis() < deadline) {
                 try {
                     val snap = thermal.read()
-                    snap.cpuC?.let { if (temps.size < 9000) temps.add(it) }
+                    if (snap.cpuC != null && temps.size < 9000) {
+                        val now = snap.timestamp
+                        temps.add(snap.cpuC)
+                        times.add(now)
+                        snap.cpuAvgC?.let { cpuAvg.add(it) }
+                        snap.thermalStatus?.let { statuses.add(it) }
+                        snap.thermalHeadroom?.let { headrooms.add(it) }
+                    }
                     snap.batteryC?.let { if (batteryTemps.size < 9000) batteryTemps.add(it) }
                     snap.coreMhz.maxOrNull()?.let { if (freqs.size < 9000) freqs.add(it) }
                 } catch (_: Throwable) {
@@ -141,7 +160,11 @@ class SystemMonitor(private val context: Context) {
         cpuTemps = synchronized(temps) { ArrayList(temps) },
         batteryTemps = synchronized(batteryTemps) { ArrayList(batteryTemps) },
         freqMhz = synchronized(freqs) { ArrayList(freqs) },
-        batteryPercent = synchronized(battery) { ArrayList(battery) }
+        batteryPercent = synchronized(battery) { ArrayList(battery) },
+        timestamps = synchronized(times) { ArrayList(times) },
+        cpuAvgTemps = synchronized(cpuAvg) { ArrayList(cpuAvg) },
+        thermalStatuses = synchronized(statuses) { ArrayList(statuses) },
+        headrooms = synchronized(headrooms) { ArrayList(headrooms) }
     )
 }
 
@@ -375,10 +398,37 @@ object ResultStore {
         return file
     }
 
-    /** Maraton: full series, so the browser panel can chart it after a restart. */
+    /** Maraton: full series, so the result screen can chart it after a restart. */
     fun saveMarathon(context: Context, result: MarathonResult): File {
         val file = File(dir(context), "maraton_${stamp(result.timestamp)}.json")
         file.writeText(MarathonJson.encode(result))
+        return file
+    }
+
+    /**
+     * Summary of a 3-run series: median, half-range and the spread. Written as a
+     * separate file so each individual run stays intact while the repeatability
+     * evidence is still on disk.
+     */
+    fun saveSeries(context: Context, stats: RepeatStats, results: List<MarathonResult>): File {
+        val file = File(dir(context), "seri_maraton_${stamp()}.json")
+        val json = org.json.JSONObject().apply {
+            put("suite", "MaratonSeri")
+            put("schemaVersion", MarathonJson.SCHEMA_VERSION)
+            put("workloadVersion", results.firstOrNull()?.workloadVersion ?: WORKLOAD_VERSION)
+            put("appVersion", results.firstOrNull()?.appVersion ?: "?")
+            put("device", results.firstOrNull()?.device ?: "?")
+            put("runs", stats.totals.size)
+            put("totals", org.json.JSONArray(stats.totals))
+            put("median", stats.median)
+            put("halfRange", stats.halfRange)
+            put("spreadPercent", stats.spreadPercent)
+            put("unreliable", stats.unstable)
+            put("thresholdPercent", Repeatability.UNSTABLE_SPREAD_PERCENT)
+            put("note", "Aynı cihaz, aralarda soğuma. %5 üzeri yayılım güvenilmez sayılır.")
+            put("runFiles", org.json.JSONArray(results.map { "maraton_${stamp(it.timestamp)}.json" }))
+        }
+        file.writeText(json.toString(2))
         return file
     }
 
@@ -406,7 +456,9 @@ object ResultStore {
         val ux: Double?,
         val sustained: Double?,
         val stability: Double?,
-        val api: String?
+        val api: String?,
+        val appVersion: String?,
+        val workloadVersion: Int?
     )
 
     /**
@@ -432,7 +484,9 @@ object ResultStore {
                 ux = scores?.optDoubleOrNull("ux"),
                 sustained = scores?.optDoubleOrNull("sustained"),
                 stability = scores?.optDoubleOrNull("stability"),
-                api = root.optJSONObject("gpu")?.optString("api")?.takeIf { it.isNotBlank() }
+                api = root.optJSONObject("gpu")?.optString("api")?.takeIf { it.isNotBlank() },
+                appVersion = root.optString("appVersion").takeIf { it.isNotBlank() },
+                workloadVersion = root.optInt("workloadVersion", -1).takeIf { it > 0 }
             )
         } catch (t: Throwable) {
             null

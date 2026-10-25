@@ -14,7 +14,7 @@ import androidx.compose.runtime.setValue
  *
  * What this cannot do, and never claims to do: put *other* applications into a
  * test mode. A rootless app cannot suspend, clamp or reconfigure other packages.
- * The panel therefore also reports whether the screen stayed on and DeviceScope
+ * The result therefore also reports whether the screen stayed on and DeviceScope
  * stayed in the foreground, so a run with a phone call in the middle is visible
  * instead of being silently accepted.
  */

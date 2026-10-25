@@ -42,7 +42,6 @@ import androidx.compose.ui.unit.dp
 import com.alican.devicescope.DeviceInfoCollector
 import com.alican.devicescope.HistoryCollector
 import com.alican.devicescope.Section
-import com.alican.devicescope.ServerState
 import com.alican.devicescope.ThermalCollector
 import com.alican.devicescope.ThermalSnapshot
 import com.alican.devicescope.TestMode
@@ -55,7 +54,6 @@ enum class Tab(val label: String) {
     DEVICE("Cihaz"),
     THERMAL("Sıcaklık"),
     HISTORY("Geçmiş"),
-    REMOTE("Uzaktan"),
     TEST("Test")
 }
 
@@ -67,10 +65,6 @@ class AppState(val context: Context) {
     var loading by mutableStateOf(true)
     var thermal by mutableStateOf<ThermalSnapshot?>(null)
     var thermalError by mutableStateOf<String?>(null)
-
-    var serverRunning by mutableStateOf(ServerState.isRunning)
-    var serverUrl by mutableStateOf<String?>(null)
-    var serverError by mutableStateOf<String?>(null)
 
     private val thermalCollector = ThermalCollector(context)
 
@@ -105,13 +99,6 @@ class AppState(val context: Context) {
         }
     }
 
-    fun refreshServer(scope: kotlinx.coroutines.CoroutineScope) {
-        scope.launch {
-            serverRunning = ServerState.isRunning
-            serverUrl = if (serverRunning) ServerState.url(context) else null
-            serverError = ServerState.lastError
-        }
-    }
 }
 
 @Composable
@@ -171,7 +158,6 @@ fun DeviceScopeApp(state: AppState, bench: BenchController) {
                         Tab.DEVICE -> DeviceScreen(state)
                         Tab.THERMAL -> ThermalScreen(state)
                         Tab.HISTORY -> HistoryScreen(state)
-                        Tab.REMOTE -> RemoteScreen(state)
                         Tab.TEST -> TestScreen(state, bench)
                     }
                 }
@@ -215,21 +201,6 @@ private fun AppHeader(state: AppState, onToggleTheme: () -> Unit) {
             contentAlignment = Alignment.Center
         ) {
             SoftText(if (state.dark) "☀" else "☾", size = 15, color = p.text2)
-        }
-        Spacer(Modifier.width(8.dp))
-        Box(
-            Modifier
-                .size(40.dp)
-                .clip(CircleShape)
-                .background(p.surface),
-            contentAlignment = Alignment.Center
-        ) {
-            Box(
-                Modifier
-                    .size(9.dp)
-                    .clip(CircleShape)
-                    .background(if (state.serverRunning) p.accent else p.text3.copy(alpha = 0.45f))
-            )
         }
     }
 }
@@ -350,22 +321,6 @@ private fun TabGlyph(tab: Tab, color: Color) {
                     strokeWidth = sw,
                     cap = StrokeCap.Round
                 )
-            }
-            Tab.REMOTE -> {
-                // Three nested arcs opening upward plus a dot: a wifi mark.
-                listOf(1.0f, 0.66f, 0.34f).forEach { f ->
-                    val d = w * 0.86f * f
-                    drawArc(
-                        color = color,
-                        startAngle = 215f,
-                        sweepAngle = 110f,
-                        useCenter = false,
-                        topLeft = Offset(w * 0.5f - d / 2f, h * 0.30f),
-                        size = Size(d, d),
-                        style = stroke
-                    )
-                }
-                drawCircle(color = color, radius = w * 0.075f, center = Offset(w * 0.5f, h * 0.80f))
             }
             Tab.TEST -> {
                 drawArc(

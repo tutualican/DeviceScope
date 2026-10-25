@@ -1,12 +1,12 @@
 # DeviceScope
 
 Android cihazın donanım bilgilerini, canlı sıcaklıklarını, erişilebilen geçmiş
-kayıtlarını ve üç bağımsız performans testini (Mikyas, Kinetik, Maraton) gösteren;
-aynı Wi-Fi ağındaki laptop tarayıcısından izlenebilen ve **test başlatılabilen**
-uygulama.
+kayıtlarını ve üç bağımsız performans testini (Mikyas, Kinetik, Maraton) gösteren
+yerel uygulama. Ağ/tarayıcı özelliği kaldırıldı; tüm kontrol telefonun kendi
+arayüzündedir.
 
 **Depo:** https://github.com/tutualican/DeviceScope
-**Sürüm:** v1.1.0 · APK sürüm ekinde (`DeviceScope.apk`, debug imzalı)
+**Sürüm:** v1.2.0 · APK sürüm ekinde (`DeviceScope.apk`, debug imzalı)
 
 Yerel kopya: `C:\Users\Alican\Desktop\DeviceScope.apk`
 
@@ -21,8 +21,7 @@ kutu katmanları kaldırıldı. Apple Intelligence diline yaklaşan üç kural:
 - **Renk sadece anlam taşıdığında:** gradyan halka yalnızca manşet puanda,
   turkuaz/mavi spektrum ise dekoratif arka plan ışımasında kullanılır.
 
-Koyu ve açık tema var; başlıktaki düğmeyle değişir. Tarayıcı paneli aynı token
-setini kullanır (koyu, yüzen pill navigasyon, aynı gölge ve yarıçap ölçeği).
+Koyu ve açık tema var; başlıktaki düğmeyle değişir.
 
 ## Sekmeler
 
@@ -31,8 +30,7 @@ setini kullanır (koyu, yüzen pill navigasyon, aynı gölge ve yarıçap ölçe
 | Cihaz | Üretici, marka, model, SoC, CPU kümeleri/frekansları, GPU (gerçek OpenGL sorgusu), RAM, depolama çipi, batarya, ekran paneli, kameralar, anakart, yazılım — her bölüm ilk 3 alanı gösterir, gerisi tek dokunuşla açılır |
 | Sıcaklık | En sıcak bileşen manşette; işlemci / batarya / hissedilen için üç halka; bileşen maksimumları, çekirdek frekansları ve ham sensör tablosu katlanmış kartlarda |
 | Geçmiş | İlk açılış, son önyükleme, ROM/çekirdek derleme tarihleri, pil döngüsü ve kapasite kaybı, panel üretim haftası (EDID varsa), çalışma süresi |
-| Uzaktan | Telefon içinde çalışan HTTP sunucusu + tarayıcı paneli; adres, kopyala/paylaş ve tek ana düğme |
-| Test | Beş segment: **Maraton** (≥15 dk birleşik uzun koşu), **Mikyas** (CPU/bellek/disk), **Kinetik** (GPU/arayüz/ısıl dayanım), **Kıyas** (kayıtlı sonuçlar), **Doğrulama** (ölçümün kendisini sınayan paket) |
+| Test | Beş segment: **Maraton** (≥15 dk birleşik uzun koşu, koşul kapısı ve 1–3 koşu tekrarı), **Mikyas** (CPU/bellek/disk), **Kinetik** (GPU/arayüz/ısıl dayanım), **Kıyas** (kayıtlı sonuçlar), **Doğrulama** (ölçümün kendisini sınayan paket) |
 
 Her test sonucu tek bir manşet kartla açılır: gradyan halka içinde puan, altında
 tek cümlelik özet ve doğrulama rozeti. Kategori çubukları açık gelir; ölçüm
@@ -92,23 +90,51 @@ cache dizininde 128 MB gerçek yazma (`fsync` ile) + okuma yapar.
 Tek koşuda Geekbench tarzı tek/çok çekirdek, bellek, depolama, Vulkan GPU,
 ekranda AnTuTu tarzı görsel sahne ve ısıl kararlılık ölçülür.
 
+- **Koşul kapısı (yeni):** ölçüm başlamadan önce pil seviyesi, şarj durumu,
+  güç tasarrufu, uçak modu/Wi-Fi/mobil veri, parlaklık, ekran zaman aşımı,
+  platform ısıl durumu (`getCurrentThermalStatus`) ve ısıl boşluk
+  (`getThermalHeadroom`) okunur. Batarya sıcaklığı **3 dakika** boyunca izlenir;
+  0,3 °C'den fazla oynarsa test **başlamaz**. Uygun olmayan koşulda kullanıcı
+  açıkça "yine de başlat" derse nedenler sonuç dosyasına `forced=true` olarak
+  yazılır. Tüm koşullar ve kaynakları (OK/WARN/BLOCK) sonuç dosyasındadır; iki
+  sonuç ancak koşulları eşleşiyorsa kıyaslanabilir.
 - **Süre bir alt sınırdır.** 15/30/45 dk seçilir; motor `coerceAtLeast(15)`
   uygular ve sürdürülen döngü duvar saati hedefe ulaşana kadar devam eder.
-  15 dakikadan kısa bir koşu üretilemez.
+  15 dakikadan kısa bir koşu üretilemez. İstenirse **3 koşu** arka arkaya
+  çalışır (aralarda 5 dk soğuma), medyan ve aralık yazılır; yayılım %5'i aşarsa
+  "güvenilmez" uyarısı verilir.
 - **Sıra:** doğrulama → tek çekirdek (7 iş yükü) → çok çekirdek → bellek → 128 MB
   depolama → Vulkan compute + çevrimdışı sahne → ekranda görsel sahne (20 sn,
   gerçek kareler) → dönüşümlü tek/çok çekirdek sürdürülen döngü (kalan süre,
-  tipik olarak ~12 dk) → rapor.
+  tipik olarak ~12 dk) → 2 dakikalık **soğuma eğrisi** → rapor.
 - **Toplam** = yedi bileşenin ağırlıklı ortalaması: tek 0,18 · çok 0,22 ·
   bellek 0,08 · depolama 0,08 · GPU 0,20 · görsel/arayüz 0,12 · kararlılık 0,12.
   Bir bileşen ölçülemezse o ağırlık düşer, kalanlar normalize edilir; eksik
   bileşen sıfır puan gibi sayılmaz.
-- **Kararlılık** = `1000 × (son üçte bir ortancası / ilk üçte bir ortancası) ×
-  (1 − sürdürülen ölçümlerin CV'si)`; en az 6 sürdürülen örnek gerekir ve sonuç
-  0–1100 aralığına sıkıştırılır. %100 koruma + sıfır sapma = 1000.
-- **Kayıt:** `filesDir/results/maraton_<zaman>.json` — tüm bileşen ölçümleri,
-  sürdürülen tur serisi, sıcaklık serisi, monitör özeti, doğrulama, sağlama
-  toplamı ve ekran kontrolü. Tarayıcı paneli bu dosyayı çizelgelere döker.
+- **Isınma:** sürdürülen döngünün ilk **45 saniyesi** ısınma sayılır ve hiçbir
+  kararlılık hesabına girmez; kaç turun dışlandığı sonuçta yazar.
+- **Kararlılık** iki parçaya ayrıldı: `0,60 × hız koruma + 0,40 × dalgalanma`.
+  Hız koruma = **son pencerenin ortancası / en iyi sürdürülen pencerenin
+  ortancası** (ilk üçte bir referansı kaldırıldı). Oran %100'ü aşarsa kırpılır ve
+  "başlangıç yavaş" işaretlenir. Dalgalanma puanı tek çekirdek ve çok çekirdek
+  **CV'lerinden ayrı ayrı** hesaplanır. En az 6 geçerli örnek yoksa kararlılık
+  üretilmez (puan 0 değil, eksik sayılır). Sonuç 0–1100.
+- **Kirli tur:** /proc/stat ve /proc/self/stat farkından başka süreçlerin meşgul
+  ettiği çekirdek sayısı çıkarılır; ≥0,75 çekirdek veya ekran kapandıysa tur
+  "kirli" işaretlenir ve kararlılıktan çıkarılır. Kaç turun çıkarıldığı ve nedeni
+  sonuçta yazar.
+- **Isıl kanıt:** her turda platform ısıl durumu, ısıl boşluk, CPU en sıcak zone
+  sıcaklığı, CPU ortalama sıcaklığı ve **çekirdek başına frekanslar** kaydedilir.
+  Hangi thermal zone'un kullanıldığı ve değerin "en sıcak" mı "ortalama" mı
+  olduğu dosyada açıkça belirtilir; kartlar aynı seriden beslenir.
+- **Enerji:** `BATTERY_PROPERTY_CURRENT_NOW × gerilim` ile yaklaşık watt,
+  batarya tasarım kapasitesi (mAh), harcanan Wh ve **W / 1000 puan** verimliliği
+  yazılır. Değer yaklaşıktır ve kaynağı dosyada belirtilir.
+- **Kayıt:** `filesDir/results/maraton_<zaman>.json` — şema v4: koşullar,
+  denge penceresi, tüm bileşen ölçümleri, sürdürülen tur serisi (kirli işaretli),
+  sıcaklık/frekans/ısıl durum serisi, soğuma eğrisi, enerji, doğrulama, uygulama
+  ve iş yükü sürümü. 3 koşuda ayrıca `seri_maraton_<zaman>.json` (medyan, aralık,
+  yayılım) yazılır.
 - **Test modu:** koşu başlarken uygulama tam ekran test moduna girer: görsel
   sahne, ekran açık, pencere parlaklığı %100, ön plan servisi ve durdurma
   düğmeli bildirim. Rootsuz bir uygulama **diğer uygulamaları askıya alamaz**;
@@ -133,39 +159,6 @@ ekranda AnTuTu tarzı görsel sahne ve ısıl kararlılık ölçülür.
   API'nin kullanıldığı her yerde açıkça yazılır — gizlenmez.
 - Testler cihaz sıcakken farklı çıkar. Mikyas başlangıç/tepe sıcaklığını,
   Kinetik ise tüm ısıl eğriyi kaydeder; sonuç JSON'unda ikisi de saklanır.
-
-## Uzaktan bağlantı
-
-1. Telefon ve laptop aynı Wi-Fi'da olmalı.
-2. Uygulamada **Uzaktan → Sunucuyu başlat**.
-3. Ekranda çıkan adresi laptop tarayıcısına yaz (`http://192.168.x.x:8080/?k=ANAHTAR`).
-4. Durdurmak için aynı düğme veya bildirimdeki **Durdur**.
-
-Sunucu, VPS, abonelik, internet trafiği yok. Veri cihazdan çıkmaz. Her istek
-16 haneli anahtarı ister; anahtarsız istek 401 döner. Tarayıcı paneli de aynı
-Soft UI dilinde (koyu neumorphism) tasarlandı.
-
-### Tarayıcıdan test başlatma
-
-**Testler** sekmesinden 15/30/45 dk maraton veya hızlı Mikyas/Kinetik
-başlatılabilir; canlı aşama, kalan süre, CPU/batarya sıcaklığı, frekans ve fps
-aynı kartta akar. Koşu bitince bileşen puanları, kararlılık, sıcaklık eğrisi,
-sürdürülen hız indeksi ve kayıtlı testler panelde görünür.
-
-Kontrol uçları **yalnızca POST** kabul eder ve her istek anahtar ister; bir
-bağlantı önizlemesi veya adres çubuğu kazara 15 dakikalık test başlatamaz.
-
-| Uç | Yöntem | İş |
-|---|---|---|
-| `/api/bench/start?minutes=15` | POST | Maraton başlat (süre en az 15 dk) |
-| `/api/bench/quick?suite=mikyas` | POST | Hızlı test (mikyas/kinetik) |
-| `/api/bench/cancel` | POST | Koşuyu durdur |
-| `/api/bench/status` | GET | Aşama, yüzde, geçen/kalan süre, canlı sıcaklık/frekans/fps |
-| `/api/bench/detail` | GET | Son maratonun tam JSON'u |
-
-Telefonun kilidi açık ve DeviceScope açıkken başlatın: Android, arka plandaki bir
-uygulamanın izinsiz olarak ekranı öne getirmesini engeller. Koşu yine çalışır,
-ancak görsel sahne kare üretemezse bu durum raporda açıkça yazılır.
 
 ## Etiketler
 
@@ -205,13 +198,14 @@ Doğrulandı:
   karşılaştırıldı.
 - AES algoritması (C++ ile birebir aynı adımlar) FIPS-197 C.1 vektörünü
   (`69c4e0d86a7b0430d8cdb78070b4c55a`) üretti.
-- Tarayıcı panelinin JS'i `node --check` ile sözdizimi doğrulandı.
 - Maraton süre alt sınırı (istenen 1/5/14/−30 dk → 15 dk), ağırlık toplamı,
-  ağırlıklı ortalama ve eksik bileşen normalizasyonu `MarathonConfigTest` ile
-  sınandı; 26 birim testinin tamamı geçiyor.
+  ağırlıklı ortalama, eksik bileşen normalizasyonu, ısınma/kirli tur dışlama,
+  en iyi pencereye göre hız koruma, CV'nin tür bazında ayrılması ve 3 koşu
+  medyanı `MarathonConfigTest` + `StabilityTest` ile sınandı.
 - Derlenen APK'da `TestModeService` `foregroundServiceType=specialUse` olarak
-  manifestte, maraton kontrol uçları ve test arayüzü `assets/panel.html`
-  içinde; yeni Kotlin/JSON dosyalarında U+FFFD veya mojibake yok.
+  manifestte; ağ izni yok (`INTERNET` kaldırıldı) ve `MonitorService`/panel
+  dosyaları silindi. Sonuç şeması v4; yeni Kotlin/JSON dosyalarında U+FFFD veya
+  mojibake yok.
 
 Doğrulanmadı (bu makinede mümkün değil — x86_64 emülatör için AEHD/WHPX yok,
 yönetici yetkisi yok, bağlı telefon yok):
@@ -221,11 +215,14 @@ yönetici yetkisi yok, bağlı telefon yok):
 - Vulkan aygıt/komut zincirinin gerçek bir sürücüde hatasız çalışması; her adım
   `VkResult` kontrolüyle korunuyor ve başarısızlıkta GLES'e düşüyor, ama bu
   makinede çalıştırılarak kanıtlanamadı.
-- **Maraton'un 15 dakikalık gerçek koşusu**: süre alt sınırı, ağırlıklar ve
-  kararlılık formülü kodla ve birim testleriyle doğrulandı; ancak bu makinede
-  (hızlandırmasız emülatör, bağlı telefon yok) 15 dakikalık saha koşusu
-  çalıştırılamadı. Görsel sahnenin gerçek kare üretmesi ve telefonun test
-  modunda ekranı açık tutması da cihaz üzerinde teyit edilmedi.
+- **Maraton'un 15 dakikalık gerçek koşusu**: süre alt sınırı, ağırlıklar,
+  ısınma/retention/CV kuralları ve 3 koşu medyanı kodla ve birim testleriyle
+  doğrulandı; ancak bu makinede (hızlandırmasız emülatör, bağlı telefon yok)
+  15 dakikalık saha koşusu çalıştırılamadı. Görsel sahnenin gerçek kare üretmesi,
+  telefonun test modunda ekranı açık tutması, `/proc/stat` kirlilik ölçümü,
+  `getThermalHeadroom`/`getCurrentThermalStatus`, batarya akımı ve tasarım
+  kapasitesi cihaz üzerinde teyit edilmedi; okunamazsa sonuçta "ölçülemedi"
+  yazar. Isıl denge için 3 dakikalık gerçek bekleme de sahada sınanmadı.
 
 ## Doğrulama paketi (Test → Doğrulama)
 

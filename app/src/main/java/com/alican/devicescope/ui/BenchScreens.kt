@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -119,6 +120,11 @@ private fun MaratonView(bench: BenchController) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var minutes by remember { mutableStateOf(15) }
+    var runs by remember { mutableStateOf(1) }
+
+    LaunchedEffect(bench.marathonRunning) {
+        if (!bench.marathonRunning) bench.refreshConditions()
+    }
 
     ScreenScroll {
         SoftCard(Modifier.fillMaxWidth(), padding = 20.dp) {
@@ -140,6 +146,24 @@ private fun MaratonView(bench: BenchController) {
                 },
                 onSelect = { minutes = listOf(15, 30, 45)[it] }
             )
+            Spacer(Modifier.height(12.dp))
+            SoftText("Koşu sayısı", size = 12, color = p.text3)
+            Spacer(Modifier.height(6.dp))
+            SoftSegmented(
+                items = listOf("1 koşu", "3 koşu · medyan"),
+                selected = if (runs == 1) 0 else 1,
+                onSelect = { runs = if (it == 0) 1 else 3 }
+            )
+            if (runs > 1) {
+                Spacer(Modifier.height(6.dp))
+                SoftText(
+                    "3 koşu arasında 5 dk soğuma beklenir. Toplam süre yaklaşık " +
+                        "${minutes * 3 + 10} dk. Sonuçta medyan ve aralık yazılır; fark %5'i " +
+                        "aşarsa \"güvenilmez\" uyarısı verilir.",
+                    size = 11,
+                    color = p.text3
+                )
+            }
             Spacer(Modifier.height(14.dp))
 
             if (bench.marathonRunning) {
@@ -158,19 +182,52 @@ private fun MaratonView(bench: BenchController) {
                 SoftButton(
                     (if (bench.marathon == null) "Maratonu başlat  ·  $minutes dk"
                     else "Yeniden ölç  ·  $minutes dk"),
-                    onClick = { bench.runMarathon(minutes) },
+                    onClick = { bench.runMarathon(minutes, runs = runs) },
                     modifier = Modifier.fillMaxWidth()
                 )
+                Spacer(Modifier.height(8.dp))
+                SoftButton(
+                    if (bench.preflightBusy) "Koşullar okunuyor…" else "Koşulları denetle",
+                    onClick = {
+                        bench.clearBlocked()
+                        bench.refreshConditions()
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                )
+                if (bench.blockedReasons != null) {
+                    Spacer(Modifier.height(10.dp))
+                    EmptyNote(
+                        "Koşullar uygun değil. Yine de başlatırsanız nedenleriyle birlikte " +
+                            "sonuç dosyasına \"forced\" olarak yazılır."
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    SoftButton(
+                        "Yine de başlat · koşullar kaydedilir",
+                        onClick = { bench.runMarathon(minutes, force = true, runs = runs) },
+                        modifier = Modifier.fillMaxWidth(),
+                        danger = true
+                    )
+                }
             }
 
             Spacer(Modifier.height(10.dp))
             SoftText(
-                "Başlarken telefon test moduna girer: tam ekran görsel sahne, ekran açık, parlaklık %100 " +
-                    "ve ön plan servisi. Rootsuz bir uygulama diğer uygulamaları askıya alamaz; bu yüzden " +
-                    "test sırasında ekranın kapanmadığı ayrıca kontrol edilir ve raporda yazar.",
+                "Başlamadan önce 3 dakika batarya sıcaklığı izlenir; 0,3 °C'den fazla oynarsa " +
+                    "test başlamaz. Başlarken telefon test moduna girer: tam ekran görsel sahne, " +
+                    "ekran açık, parlaklık %100 ve ön plan servisi. Rootsuz bir uygulama diğer " +
+                    "uygulamaları askıya alamaz; kirlenen turlar /proc/stat ile işaretlenip " +
+                    "hesaptan çıkarılır.",
                 size = 11,
                 color = p.text3
             )
+        }
+
+        Spacer(Modifier.height(12.dp))
+        ConditionsCard(bench)
+
+        bench.repeatWarning?.let {
+            Spacer(Modifier.height(10.dp))
+            EmptyNote(it)
         }
 
         bench.error?.let {
@@ -227,6 +284,92 @@ private fun MaratonView(bench: BenchController) {
                 trailing = r.retentionPercent?.let { String.format(Locale.US, "%.1f%%", it) } ?: "—"
             ) {
                 StabilityBody(r)
+            }
+
+            Spacer(Modifier.height(10.dp))
+            SoftDisclosure(
+                title = "Güç ve enerji",
+                subtitle = "Yaklaşık watt, batarya kapasitesi ve puan başına verim",
+                trailing = r.energy?.avgWatts?.let { String.format(Locale.US, "%.1f W", it) } ?: "—"
+            ) {
+                EnergyBody(r)
+            }
+
+            bench.series?.let { s ->
+                Spacer(Modifier.height(10.dp))
+                SoftDisclosure(
+                    title = "Koşu tekrarları",
+                    subtitle = "Aynı cihaz, aynı koşullar; medyan ve aralık",
+                    trailing = "${s.totals.size} koşu"
+                ) {
+                    SoftKeyValue(
+                        "Toplamlar",
+                        s.totals.joinToString(" · ") { n1(it) },
+                        p.text2
+                    )
+                    SoftKeyValue(
+                        "Medyan",
+                        "${n1(s.median)} ± ${n1(s.halfRange)}",
+                        p.accent
+                    )
+                    SoftKeyValue(
+                        "Yayılım",
+                        String.format(Locale.US, "%.1f%%", s.spreadPercent),
+                        if (s.unstable) p.crit else p.accent
+                    )
+                    SoftText(
+                        if (s.unstable) {
+                            "Koşular arasındaki fark %5'i aşıyor: sonuç güvenilmez sayılır. " +
+                                "Sıcaklık, arka plan yükü ve pil seviyesini eşitleyip yeniden deneyin."
+                        } else {
+                            "Koşular birbirine yakın; medyan güvenilir bir merkez değeri."
+                        },
+                        size = 11,
+                        color = p.text3
+                    )
+                }
+            }
+
+            Spacer(Modifier.height(10.dp))
+            SoftDisclosure(
+                title = "Koşullar ve sürüm",
+                subtitle = "Bu sonucun hangi koşullarda ve hangi algoritmayla üretildiği",
+            ) {
+                SoftKeyValue(
+                    "Uygulama / iş yükü",
+                    "v${r.appVersion} · iş yükü v${r.workloadVersion}",
+                    p.text2
+                )
+                SoftKeyValue(
+                    "Başlangıç koşulu",
+                    if (r.conditions.forced) "zorla başlatıldı" else "koşullar uygun",
+                    if (r.conditions.forced) p.warm else p.accent
+                )
+                r.conditions.items.forEach { item ->
+                    SoftKeyValue(
+                        item.label,
+                        item.value,
+                        when (item.state) {
+                            com.alican.devicescope.ConditionState.OK -> p.text2
+                            com.alican.devicescope.ConditionState.WARN -> p.warm
+                            com.alican.devicescope.ConditionState.BLOCK -> p.crit
+                        }
+                    )
+                }
+                SoftKeyValue(
+                    "Isıl denge",
+                    if (r.equilibrium.measurable) {
+                        String.format(Locale.US, "%.2f °C / %d sn", r.equilibrium.spanC ?: 0f, r.equilibrium.windowSeconds)
+                    } else {
+                        "ölçülemedi"
+                    },
+                    if (r.equilibrium.passed) p.accent else p.warm
+                )
+                SoftKeyValue(
+                    "Soğuma eğrisi",
+                    "${r.cooldown.size} örnek · ${r.coolingRatePerMin?.let { String.format(Locale.US, "%.2f °C/dk", it) } ?: "—"}",
+                    p.text3
+                )
             }
 
             Spacer(Modifier.height(10.dp))
@@ -348,10 +491,15 @@ private fun MaratonView(bench: BenchController) {
                             "Görsel/arayüz" to n1(r.uxScore),
                             "Kararlılık" to n1(r.stabilityScore),
                             "Hız koruma" to (r.retentionPercent?.let { String.format(Locale.US, "%.1f%%", it) } ?: "—"),
+                            "Güç" to (r.energy?.avgWatts?.let { String.format(Locale.US, "%.2f W", it) } ?: "—"),
+                            "Verimlilik" to (r.energy?.wattsPer1000Points?.let { String.format(Locale.US, "%.3f W/1000p", it) } ?: "—"),
                             "Isıl tepe" to temp(r.peakTempC),
                             "Süre" to duration(r.durationSeconds)
                         ),
-                        footer = "Puanlar ölçülen hızın sabit referansa oranıdır (1000 = referans). " +
+                        footer = "v${r.appVersion} · iş yükü v${r.workloadVersion} · " +
+                            "pil %${r.batteryStartPercent ?: "?"} → %${r.batteryEndPercent ?: "?"} · " +
+                            (if (r.conditions.forced) "zorla başlatıldı" else "koşullar uygun") + ". " +
+                            "Puanlar ölçülen hızın sabit referansa oranıdır (1000 = referans). " +
                             "Sürdürülen turlar, sıcaklık eğrisi ve ham metrikler uygulamada görünür."
                     )
                     scope.launch(Dispatchers.IO) {
@@ -379,9 +527,27 @@ private fun MaratonView(bench: BenchController) {
             )
             Spacer(Modifier.height(8.dp))
             SoftText(
-                "Kararlılık = 1000 × (son üçte bir ortancası / ilk üçte bir ortancası) × " +
-                    "(1 − sürdürülen ölçümlerin CV'si). %100 koruma ve sıfır sapma 1000 puandır; " +
-                    "1100 ile sınırlanır. En az 6 sürdürülen örnek yoksa kararlılık puanı üretilmez.",
+                "Başlamadan önce pil, şarj, güç tasarrufu, uçak modu, parlaklık, ekran zaman aşımı, " +
+                    "platform ısıl durumu ve 3 dakikalık batarya sıcaklığı dengesi okunur. Uygun " +
+                    "değilse test başlamaz; \"yine de başlat\" seçilirse nedenler sonuç dosyasına yazılır.",
+                size = 12,
+                color = p.text3
+            )
+            Spacer(Modifier.height(8.dp))
+            SoftText(
+                "Kararlılık = %60 × hız koruma puanı + %40 × dalgalanma puanı. Hız koruma, son " +
+                    "pencerenin ortancasının en iyi sürdürülen pencerenin ortancasına oranıdır; %100'ü " +
+                    "aşarsa kırpılır ve \"başlangıç yavaş\" işaretlenir. Dalgalanma puanı, tek ve çok " +
+                    "çekirdek CV'lerinin ayrı ayrı hesaplanmasıyla bulunur. İlk 45 sn ısınma dışlanır.",
+                size = 12,
+                color = p.text3
+            )
+            Spacer(Modifier.height(8.dp))
+            SoftText(
+                "Enerji: BATTERY_PROPERTY_CURRENT_NOW × gerilim ile yaklaşık watt; batarya kapasitesi " +
+                    "ve \"W / 1000 puan\" verimliliği sonuca yazılır. Isıl kısıtlama hız düşüşünden " +
+                    "tahmin edilmez: PowerManager.getCurrentThermalStatus() ve getThermalHeadroom() " +
+                    "doğrudan okunur, kullanılan thermal zone ve en sıcak/ortalama ayrımı kaydedilir.",
                 size = 12,
                 color = p.text3
             )
@@ -403,7 +569,8 @@ private fun MaratonView(bench: BenchController) {
 @Composable
 private fun StabilityBody(r: com.alican.devicescope.bench.MarathonResult) {
     val p = LocalSoft.current
-    val retention = r.retentionPercent
+    val s = r.stability
+    val retention = s.retentionPercent
     SoftKeyValue(
         "Hız koruma oranı",
         retention?.let { String.format(Locale.US, "%.1f%%", it) } ?: "yetersiz örnek",
@@ -415,49 +582,234 @@ private fun StabilityBody(r: com.alican.devicescope.bench.MarathonResult) {
         }
     )
     SoftKeyValue(
+        "En iyi pencere / son pencere",
+        "${n1(s.bestWindowIndex ?: 0.0)} → ${n1(s.lastWindowIndex ?: 0.0)}",
+        p.text2
+    )
+    SoftKeyValue(
         "Kararlılık puanı",
-        n1(r.stabilityScore),
-        if (r.stabilityScore >= 850) p.accent else if (r.stabilityScore >= 650) p.warm else p.crit
+        n1(s.score),
+        if (s.score >= 850) p.accent else if (s.score >= 650) p.warm else p.crit
     )
     SoftKeyValue(
-        "Sürdürülen sapma (CV)",
-        String.format(Locale.US, "%.2f%%", r.stabilityCv),
-        cvColor(r.stabilityCv)
+        "— hız korundu (ağırlık %60)",
+        n1(s.retentionScore),
+        if (s.retentionScore >= 850) p.accent else p.warm
     )
     SoftKeyValue(
-        "Sıcaklık",
+        "— dalgalanma (ağırlık %40)",
+        n1(s.consistencyScore),
+        if (s.consistencyScore >= 850) p.accent else p.warm
+    )
+    SoftKeyValue(
+        "Sapma CV · tek / çok",
+        String.format(Locale.US, "%.2f%% / %.2f%%", s.singleCv, s.multiCv),
+        cvColor(s.combinedCv)
+    )
+    SoftKeyValue(
+        "Sıcaklık (en sıcak CPU zone)",
         "${temp(r.startTempC)} → ${temp(r.peakTempC)} → ${temp(r.endTempC)}",
         p.tempColor(r.peakTempC)
     )
     SoftKeyValue(
-        "Sürdürülen tur",
-        "${r.rounds.size} tur · dönüşümlü tek/çok çekirdek",
-        p.text3
+        "Platform ısıl durumu",
+        r.rounds.mapNotNull { it.thermalStatus }.maxOrNull()?.let { thermalLabel(it) } ?: "ölçülemedi",
+        if (r.thermalThrottleObserved) p.warm else p.accent
     )
+    SoftKeyValue(
+        "En düşük ısıl boşluk",
+        r.minHeadroom?.let { String.format(Locale.US, "%.2f", it) } ?: "ölçülemedi",
+        p.text2
+    )
+    SoftKeyValue(
+        "Isınma / kirli tur",
+        "${s.warmupExcludedRounds} ısınma dışlandı · ${s.contaminatedRounds} kirli dışlandı",
+        if (s.contaminatedRounds > 0) p.warm else p.text3
+    )
+    SoftKeyValue(
+        "Soğuma hızı",
+        r.coolingRatePerMin?.let { String.format(Locale.US, "%.2f °C/dk", it) } ?: "ölçülemedi",
+        p.cool
+    )
+    if (s.slowStart) {
+        Spacer(Modifier.height(6.dp))
+        SoftChip("başlangıç yavaş · oran kırpıldı", p.warm)
+    }
+    if (r.lowBatteryWarning) {
+        Spacer(Modifier.height(6.dp))
+        SoftChip("pil %20'nin altına indi", p.crit)
+    }
     if (r.rounds.size > 4) {
         Spacer(Modifier.height(12.dp))
-        SoftText("Sürdürülen hız indeksi", size = 12, color = p.text3)
+        SoftText("Sürdürülen hız indeksi · tek ve çok çekirdek", size = 12, color = p.text3)
         Spacer(Modifier.height(6.dp))
         Sparkline(r.rounds.map { it.index }, p.accent)
     }
     if (r.tempSamples.size > 4) {
         Spacer(Modifier.height(12.dp))
-        SoftText("CPU sıcaklığı (°C)", size = 12, color = p.text3)
+        SoftText("CPU sıcaklığı (°C) · en sıcak zone", size = 12, color = p.text3)
         Spacer(Modifier.height(6.dp))
         Sparkline(r.tempSamples.map { it.second.toDouble() }, p.hot)
     }
+    if (r.cooldown.size > 2) {
+        Spacer(Modifier.height(12.dp))
+        SoftText("Test sonrası soğuma eğrisi (°C)", size = 12, color = p.text3)
+        Spacer(Modifier.height(6.dp))
+        Sparkline(r.cooldown.mapNotNull { it.cpuC?.toDouble() }, p.cool)
+    }
     Spacer(Modifier.height(8.dp))
     Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-        if (r.throttled) SoftChip("ısıl kısıtlama", p.warm) else SoftChip("koruma ≥ %85", p.accent)
+        if (r.thermalThrottleObserved) SoftChip("platform: kısıtlama", p.warm)
+        else SoftChip("platform: kısıtlama yok", p.accent)
         if (r.screenKeptOn) SoftChip("ekran açık", p.accent) else SoftChip("ekran kontrolü eksik", p.text3)
+        if (r.verified) SoftChip("doğrulandı", p.accent) else SoftChip("doğrulama hatası", p.crit)
     }
     Spacer(Modifier.height(8.dp))
     SoftText(
-        "Oran, ilk üçte birlik dilimin ortancasına göre son üçte birlik dilimin ortancasıdır. " +
-            "Düşük oran cihazın yük altında hız kıstığını gösterir; sıcaklık eğrisi bunu doğrular.",
+        "İlk ${r.config.warmupSeconds} sn ısınma sayılır ve hesaba katılmaz. Oran, son pencerenin " +
+            "ortancasının en iyi sürdürülen pencerenin ortancasına bölümüdür; %100'ü aşarsa kırpılır " +
+            "ve \"başlangıç yavaş\" diye işaretlenir. Tek ve çok çekirdek CV'si ayrı hesaplanır. " +
+            "Kirlenen turlar (ekran kapandı veya başka süreç CPU çaldı) seriden çıkarılır.",
         size = 12,
         color = p.text3
     )
+}
+
+@Composable
+private fun ConditionsCard(bench: BenchController) {
+    val p = LocalSoft.current
+    val c = bench.conditions
+    val blocked = bench.blockedReasons
+    val stateColor = { state: com.alican.devicescope.ConditionState ->
+        when (state) {
+            com.alican.devicescope.ConditionState.OK -> p.accent
+            com.alican.devicescope.ConditionState.WARN -> p.warm
+            com.alican.devicescope.ConditionState.BLOCK -> p.crit
+        }
+    }
+    SoftDisclosure(
+        title = "Test koşulları",
+        subtitle = "İki sonucun kıyaslanabilmesi için kaydedilir",
+        trailing = when {
+            blocked != null -> "ENGELLİ"
+            c == null -> "—"
+            !c.canStart -> "ENGEL VAR"
+            c.warnings.isNotEmpty() -> "UYARI"
+            else -> "UYGUN"
+        },
+        defaultOpen = true
+    ) {
+        if (c == null) {
+            SoftText("Koşullar henüz okunmadı.", size = 12, color = p.text3)
+            return@SoftDisclosure
+        }
+        c.items.forEach { item ->
+            SoftKeyValue(item.label, item.value, stateColor(item.state))
+            item.detail?.let {
+                SoftText(it, size = 10, color = p.text3)
+            }
+            Spacer(Modifier.height(2.dp))
+        }
+        SoftDivider()
+        SoftKeyValue(
+            "Batarya kapasitesi",
+            c.capacityMah?.let { String.format(Locale.US, "%.0f mAh", it) } ?: "ölçülemedi",
+            p.text2
+        )
+        SoftKeyValue(
+            "Anlık güç",
+            c.watts?.let { String.format(Locale.US, "%.2f W", it) } ?: "ölçülemedi",
+            p.text2
+        )
+        SoftKeyValue(
+            "CPU ısıl zone",
+            c.cpuZone ?: "ölçülemedi",
+            p.text3
+        )
+        SoftKeyValue(
+            "Sürüm",
+            "uygulama ${c.appVersion} · iş yükü v${c.workloadVersion}",
+            p.text3
+        )
+        bench.equilibrium?.let { e ->
+            SoftDivider()
+            SoftKeyValue(
+                "Isıl denge (${e.windowSeconds} sn)",
+                if (e.passed) "sağlandı · ${String.format(Locale.US, "%.2f °C", e.spanC ?: 0f)}"
+                else if (!e.measurable) "ölçülemedi"
+                else String.format(Locale.US, "sağlanmadı · %.2f °C", e.spanC ?: 0f),
+                if (e.passed) p.accent else p.warm
+            )
+            SoftText(e.note, size = 10, color = p.text3)
+        }
+        if (c.forced) {
+            Spacer(Modifier.height(6.dp))
+            SoftChip("zorla başlatıldı · nedenler dosyada", p.warm)
+        }
+    }
+}
+
+@Composable
+private fun EnergyBody(r: com.alican.devicescope.bench.MarathonResult) {
+    val p = LocalSoft.current
+    val e = r.energy
+    if (e == null) {
+        SoftText("Enerji ölçümü yok.", size = 12, color = p.text3)
+        return
+    }
+    SoftKeyValue(
+        "Ortalama güç",
+        e.avgWatts?.let { String.format(Locale.US, "%.2f W", it) } ?: "ölçülemedi",
+        p.accent
+    )
+    SoftKeyValue(
+        "Tepe güç",
+        e.peakWatts?.let { String.format(Locale.US, "%.2f W", it) } ?: "ölçülemedi",
+        p.warm
+    )
+    SoftKeyValue(
+        "Akım / gerilim",
+        if (e.avgCurrentMa != null && e.voltageV != null) {
+            String.format(Locale.US, "%.0f mA · %.3f V", e.avgCurrentMa, e.voltageV)
+        } else {
+            "ölçülemedi"
+        },
+        p.text2
+    )
+    SoftKeyValue(
+        "Batarya kapasitesi",
+        e.capacityMah?.let { String.format(Locale.US, "%.0f mAh", it) } ?: "ölçülemedi",
+        p.text2
+    )
+    SoftKeyValue(
+        "Harcanan enerji",
+        e.energyWh?.let { String.format(Locale.US, "%.3f Wh", it) } ?: "ölçülemedi",
+        p.text2
+    )
+    SoftKeyValue(
+        "Verimlilik",
+        e.wattsPer1000Points?.let { String.format(Locale.US, "%.3f W / 1000 puan", it) } ?: "ölçülemedi",
+        p.cool
+    )
+    Spacer(Modifier.height(6.dp))
+    SoftText(
+        "Güç = BATTERY_PROPERTY_CURRENT_NOW × gerilim. Yaklaşık değerdir; şarj devresi ve " +
+            "ekran tüketimi dahildir. Düşük W/1000 puan daha verimli demektir. " +
+            "${e.samples} geçerli turdan ortalandı.",
+        size = 11,
+        color = p.text3
+    )
+}
+
+private fun thermalLabel(status: Int): String = when (status) {
+    android.os.PowerManager.THERMAL_STATUS_NONE -> "Yok"
+    android.os.PowerManager.THERMAL_STATUS_LIGHT -> "Hafif"
+    android.os.PowerManager.THERMAL_STATUS_MODERATE -> "Orta"
+    android.os.PowerManager.THERMAL_STATUS_SEVERE -> "Ciddi"
+    android.os.PowerManager.THERMAL_STATUS_CRITICAL -> "Kritik"
+    android.os.PowerManager.THERMAL_STATUS_EMERGENCY -> "Acil"
+    android.os.PowerManager.THERMAL_STATUS_SHUTDOWN -> "Kapanma"
+    else -> "Bilinmiyor"
 }
 
 
@@ -929,6 +1281,19 @@ private fun CompareView(bench: BenchController) {
             if (mine.isEmpty()) return@forEach
             val best = mine.maxOf { it.total }
             SoftSectionTitle(suite, "${mine.size} kayıt · en iyi ${n1(best)}")
+            if (suite == "Maraton") {
+                val versions = mine.mapNotNull { it.workloadVersion }.distinct().sorted()
+                val missing = mine.count { it.workloadVersion == null }
+                if (versions.size > 1 || missing > 0) {
+                    Spacer(Modifier.height(6.dp))
+                    EmptyNote(
+                        "Farklı iş yükü sürümleri: " +
+                            (if (versions.isEmpty()) "—" else versions.joinToString(", ") { "v$it" }) +
+                            (if (missing > 0) " · $missing eski dosyada sürüm yok" else "") +
+                            ". Eski ve yeni puanlar doğrudan kıyaslanmamalı."
+                    )
+                }
+            }
             SoftCard(Modifier.fillMaxWidth(), padding = 14.dp) {
                 mine.sortedByDescending { it.total }.forEachIndexed { index, run ->
                     if (index > 0) SoftDivider()
@@ -949,7 +1314,9 @@ private fun CompareView(bench: BenchController) {
                                 SoftText(
                                     SimpleDateFormat("d MMM yyyy · HH:mm", Locale("tr", "TR"))
                                         .format(Date(run.timestamp)) +
-                                        (run.api?.let { " · $it" } ?: ""),
+                                        (run.api?.let { " · $it" } ?: "") +
+                                        (run.workloadVersion?.let { " · iş yükü v$it" }
+                                            ?: " · sürüm yok"),
                                     size = 11,
                                     color = p.text3,
                                     maxLines = 1

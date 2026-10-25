@@ -128,3 +128,10 @@ object Stats {
         return abs(a - b) / a * 100.0
     }
 }
+
+/**
+ * Bumped whenever a native kernel or its calibration changes in a way that can
+ * move a score. Written into every result file so an old run is never compared
+ * with a new one as if the algorithm were identical.
+ */
+const val WORKLOAD_VERSION = 3

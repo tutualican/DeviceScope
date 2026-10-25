@@ -4,6 +4,8 @@ import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.os.BatteryManager
+import android.os.Build
+import android.os.PowerManager
 
 enum class Category(val label: String) {
     CPU("İşlemci"),
@@ -23,9 +25,21 @@ data class Zone(
     val type: String,
     val tempC: Float,
     val category: Category,
-    val source: String
+    val source: String,
+    val path: String? = null
 )
 
+/**
+ * One thermal reading.
+ *
+ * [cpuC] is the *hottest* CPU zone and [cpuAvgC] the arithmetic mean of the CPU
+ * zones; every screen states which one it shows, so a card can never compare a
+ * max with an average and look like a contradiction.
+ *
+ * [thermalStatus] / [thermalHeadroom] come straight from PowerManager (API 29 /
+ * 30). They are the platform's own throttling verdict; the app does not infer
+ * throttling from a throughput drop when the platform will tell it directly.
+ */
 data class ThermalSnapshot(
     val batteryC: Float?,
     val cpuC: Float?,
@@ -39,8 +53,32 @@ data class ThermalSnapshot(
     val categoryMax: Map<Category, Float>,
     val coreMhz: List<Long>,
     val coreMaxMhz: List<Long>,
-    val timestamp: Long
-)
+    val timestamp: Long,
+    val cpuAvgC: Float? = null,
+    val cpuZone: String? = null,
+    val batteryZone: String? = null,
+    val thermalStatus: Int? = null,
+    val thermalHeadroom: Float? = null
+) {
+    /** Human readable PowerManager thermal status. */
+    val thermalStatusLabel: String
+        get() = when (thermalStatus) {
+            PowerManager.THERMAL_STATUS_NONE -> "Yok"
+            PowerManager.THERMAL_STATUS_LIGHT -> "Hafif"
+            PowerManager.THERMAL_STATUS_MODERATE -> "Orta"
+            PowerManager.THERMAL_STATUS_SEVERE -> "Ciddi"
+            PowerManager.THERMAL_STATUS_CRITICAL -> "Kritik"
+            PowerManager.THERMAL_STATUS_EMERGENCY -> "Acil"
+            PowerManager.THERMAL_STATUS_SHUTDOWN -> "Kapanma"
+            else -> "Bilinmiyor"
+        }
+
+    /**
+     * A single CPU temperature used by the compact cards. It is explicitly the
+     * hottest zone, which is the same value the detail sheet labels as such.
+     */
+    val cpuHottestC: Float? get() = cpuC
+}
 
 /**
  * Reads every thermal interface the platform exposes to an unprivileged app:
@@ -57,14 +95,20 @@ class ThermalCollector(private val ctx: Context) {
     private val batteryManager: BatteryManager? =
         ctx.getSystemService(Context.BATTERY_SERVICE) as? BatteryManager
 
+    private val powerManager: PowerManager? =
+        ctx.getSystemService(Context.POWER_SERVICE) as? PowerManager
+
     fun read(): ThermalSnapshot {
         val zones = ArrayList<Zone>()
         readThermalZones(zones)
         readHwmon(zones)
         dedupe(zones)
 
-        val batteryC = batteryTemp()
+        val (batteryC, batteryZone) = batteryInfo()
         val cpuC = pick(zones, Category.CPU)
+        val cpuZones = zones.filter { it.category == Category.CPU }
+        val cpuAvg = if (cpuZones.isEmpty()) null else cpuZones.map { it.tempC }.average().toFloat()
+        val cpuZone = cpuZones.maxByOrNull { it.tempC }?.let { "${it.type} · ${it.path ?: it.source}" }
         val gpuC = pick(zones, Category.GPU) ?: gpuSysfsTemp()
         val skinC = pick(zones, Category.SKIN)
 
@@ -120,8 +164,27 @@ class ThermalCollector(private val ctx: Context) {
             categoryMax = categoryMax,
             coreMhz = coreMhz,
             coreMaxMhz = coreMaxMhz,
-            timestamp = System.currentTimeMillis()
+            timestamp = System.currentTimeMillis(),
+            cpuAvgC = cpuAvg,
+            cpuZone = cpuZone,
+            batteryZone = batteryZone,
+            thermalStatus = thermalStatus(),
+            thermalHeadroom = thermalHeadroom()
         )
+    }
+
+    /** Platform thermal status (API 29+); null when the platform cannot say. */
+    fun thermalStatus(): Int? = try {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) powerManager?.currentThermalStatus else null
+    } catch (_: Throwable) {
+        null
+    }
+
+    /** Platform thermal headroom, 0.0 (throttled) .. >=1.0 (cool), API 30+. */
+    fun thermalHeadroom(): Float? = try {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) powerManager?.getThermalHeadroom(0) else null
+    } catch (_: Throwable) {
+        null
     }
 
     private fun dedupe(zones: MutableList<Zone>) {
@@ -135,7 +198,7 @@ class ThermalCollector(private val ctx: Context) {
             val type = Sys.read("${dir.path}/type") ?: dir.name
             val raw = Sys.read("${dir.path}/temp")?.toLongOrNull() ?: continue
             val temp = normalize(raw) ?: continue
-            out.add(Zone(type, temp, classify(type), "thermal"))
+            out.add(Zone(type, temp, classify(type), "thermal", "${dir.path}/temp"))
         }
     }
 
@@ -148,7 +211,7 @@ class ThermalCollector(private val ctx: Context) {
                 val temp = normalize(raw) ?: continue
                 val label = Sys.read("${dir.path}/${f.name.replace("_input", "_label")}") ?: f.name
                 val name = if (label != f.name) "$chip · $label" else "$chip · $label"
-                out.add(Zone(name, temp, classify("$chip $label"), "hwmon"))
+                out.add(Zone(name, temp, classify("$chip $label"), "hwmon", f.path))
             }
         }
     }
@@ -198,20 +261,22 @@ class ThermalCollector(private val ctx: Context) {
         return null
     }
 
-    private fun batteryTemp(): Float? {
+    private fun batteryInfo(): Pair<Float?, String?> {
         // 1) Sticky broadcast — most reliable and available everywhere
         try {
             val intent: Intent? = ctx.registerReceiver(null, IntentFilter(Intent.ACTION_BATTERY_CHANGED))
             val tenths = intent?.getIntExtra(BatteryManager.EXTRA_TEMPERATURE, Int.MIN_VALUE) ?: Int.MIN_VALUE
-            if (tenths != Int.MIN_VALUE) return tenths / 10f
+            if (tenths != Int.MIN_VALUE) {
+                return (tenths / 10f) to "BatteryManager.EXTRA_TEMPERATURE (pil hücresi)"
+            }
         } catch (_: Throwable) {
         }
         // 2) Sysfs fallback
         for (d in Sys.listDir("/sys/class/power_supply")) {
             if (Sys.read("${d.path}/type")?.equals("Battery", true) != true) continue
             val raw = Sys.read("${d.path}/temp")?.toLongOrNull() ?: continue
-            return raw / 10f
+            return (raw / 10f) to "${d.path}/temp"
         }
-        return null
+        return null to null
     }
 }

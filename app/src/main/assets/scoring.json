@@ -1,5 +1,5 @@
 {
-  "version": 3,
+  "version": 4,
   "description": "DeviceScope bileşik puan ağırlıkları. Toplam ağırlık 1.00 olmak zorunda değil; eksik grup varsa kalan ağırlıklar yeniden normalize edilir.",
   "weights": {
     "cpu": 0.40,
@@ -26,9 +26,24 @@
     }
   },
   "stability": {
-    "description": "Kararlılık puanı = 1000 x (son üçte bir ortalaması / ilk üçte bir ortalaması) x (1 - sürdürülen ölçümlerin CV'si). 1000 = hiç hız kaybetmedi ve sapma yok. 1100 ile sınırlanır.",
+    "description": "Kararlılık puanı = 0.60 x hız koruma puanı + 0.40 x dalgalanma puanı. Hız koruma = son pencerenin ortancası / en iyi sürdürülen pencerenin ortancası; oran %100'ü aşarsa kırpılır ve 'başlangıç yavaş' işaretlenir. Dalgalanma puanı tek çekirdek ve çok çekirdek CV'lerinden ayrı ayrı, örnek sayısıyla ağırlıklı olarak hesaplanır. İlk 45 sn ısınma ve kirli turlar dışlanır. 1100 ile sınırlanır.",
+    "retentionWeight": 0.60,
+    "consistencyWeight": 0.40,
     "retentionFloor": 0.0,
-    "retentionCeiling": 1.10,
+    "retentionCeiling": 1.00,
+    "slowStartPercent": 105.0,
+    "warmupSeconds": 45,
+    "contaminationOtherBusyCores": 0.75,
     "throttleWarningPercent": 85.0
+  },
+  "conditions": {
+    "description": "Test öncesi koşullar sonuç dosyasına yazılır. BLOCK durumunda test varsayılan olarak başlamaz; kullanıcı açıkça zorlarsa forced=true kaydedilir.",
+    "batteryBlockPercent": 20,
+    "batteryWarnPercent": 50,
+    "equilibriumWindowSeconds": 180,
+    "equilibriumMaxSpanC": 0.3,
+    "thermalStatusBlockAt": 3,
+    "headroomBlockBelow": 0.15,
+    "headroomWarnBelow": 0.35
   }
 }

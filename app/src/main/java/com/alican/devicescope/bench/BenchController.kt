@@ -7,6 +7,8 @@ import android.os.Looper
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import com.alican.devicescope.ConditionsSnapshot
+import com.alican.devicescope.Equilibrium
 import com.alican.devicescope.MainActivity
 import com.alican.devicescope.ThermalCollector
 import com.alican.devicescope.TestMode
@@ -16,27 +18,26 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.util.Locale
 
 /**
- * Drives every suite and exposes the state to Compose *and* to the LAN panel.
+ * Drives every suite and exposes the state to Compose.
  *
- * One instance exists per process ([shared]); the activity, the foreground
- * service and the HTTP server all talk to the same object, so a test started
- * from the browser updates the phone screen and vice versa.
+ * One instance exists per process ([shared]); the activity, the test-mode
+ * foreground service and the notification all talk to the same object.
+ *
+ * The marathon is gated: [runMarathon] first measures the pre-flight conditions
+ * and the thermal equilibrium, and refuses to start unless the caller forces it.
+ * A forced start is recorded in the result file, never hidden.
  */
 class BenchController private constructor(private val context: Context) {
 
     private val main = Handler(Looper.getMainLooper())
 
-    /**
-     * Owned by the controller, not by the composable: leaving the Test tab must
-     * not cancel a running measurement (which would also leave the running flag
-     * stuck and lose 15+ minutes of work).
-     */
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private var marathonJob: Job? = null
 
@@ -79,6 +80,28 @@ class BenchController private constructor(private val context: Context) {
     var marathonSavedFile by mutableStateOf<File?>(null)
         private set
 
+    /** Series support (3 runs with cooling pauses). */
+    var seriesRuns by mutableStateOf(1)
+        private set
+    var seriesIndex by mutableStateOf(0)
+        private set
+    var series by mutableStateOf<RepeatStats?>(null)
+        private set
+
+    /** Pre-flight gate */
+    var conditions by mutableStateOf<ConditionsSnapshot?>(null)
+        private set
+    var equilibrium by mutableStateOf<Equilibrium?>(null)
+        private set
+    var blockedReasons by mutableStateOf<List<String>?>(null)
+        private set
+    var preflightBusy by mutableStateOf(false)
+        private set
+
+    /** Difference between this run and the previous comparable run, if any. */
+    var repeatWarning by mutableStateOf<String?>(null)
+        private set
+
     var error by mutableStateOf<String?>(null)
         private set
 
@@ -98,7 +121,7 @@ class BenchController private constructor(private val context: Context) {
     // ------------------------------------------------------------- short suites
 
     fun runMikyas() {
-        if (mikyasRunning || marathonRunning) return
+        if (anyRunning) return
         mikyasRunning = true
         mikyasProgress = 0f
         mikyasLabel = "Hazırlanıyor…"
@@ -135,7 +158,7 @@ class BenchController private constructor(private val context: Context) {
     }
 
     fun runKinetik() {
-        if (kinetikRunning || marathonRunning) return
+        if (anyRunning) return
         kinetikRunning = true
         kinetikProgress = 0f
         kinetikLabel = "Hazırlanıyor…"
@@ -171,20 +194,63 @@ class BenchController private constructor(private val context: Context) {
         }
     }
 
+    // --------------------------------------------------------------- preflight
+
+    /**
+     * Reads the current conditions and records them. The UI calls this when the
+     * Maraton card is opened and before starting; it never blocks on the
+     * three-minute equilibrium window (that happens inside the run).
+     */
+    fun refreshConditions() {
+        if (preflightBusy || marathonRunning) return
+        preflightBusy = true
+        scope.launch {
+            val snap = withContext(Dispatchers.IO) {
+                try {
+                    com.alican.devicescope.ConditionCollector(context).snapshot()
+                } catch (t: Throwable) {
+                    null
+                }
+            }
+            withContext(Dispatchers.Main) {
+                if (snap != null) conditions = snap
+                preflightBusy = false
+            }
+        }
+    }
+
     // ---------------------------------------------------------------- marathon
 
     /**
-     * Starts the long-form suite. [minutes] is clamped to at least 15 by the
-     * runner; passing a smaller value cannot shorten it.
+     * Starts the long-form suite.
+     *
+     * [minutes] is clamped to at least 15. [runs] (1..3) repeats the whole
+     * marathon with [cooldownMinutes] pauses, reporting median and range.
+     * [force] starts despite blocking conditions; the reasons are stored.
      */
-    fun runMarathon(minutes: Int = 15, bringToFront: Boolean = true) {
+    fun runMarathon(
+        minutes: Int = 15,
+        force: Boolean = false,
+        runs: Int = 1,
+        cooldownMinutes: Int = 5,
+        bringToFront: Boolean = true
+    ) {
         if (anyRunning) return
         if (!nativeAvailable) {
             error = "Ölçüm çekirdeği yüklenemedi: ${nativeError ?: "bilinmeyen hata"}"
             return
         }
 
-        val config = MarathonRunner.Config(minutes = minutes.coerceAtLeast(15))
+        val total = runs.coerceIn(1, 3)
+        val config = MarathonRunner.Config(
+            minutes = minutes.coerceAtLeast(15),
+            force = force
+        )
+        // Test mode shows a countdown for the whole session including the 3 min
+        // equilibration, the 2 min cooldown and the pauses between runs.
+        val sessionMinutes = config.effectiveMinutes * total +
+            total * ((config.equilibrationSeconds + config.cooldownSeconds) / 60) +
+            (total - 1) * cooldownMinutes.coerceIn(1, 30)
         marathonRunning = true
         marathonProgress = 0f
         marathonPhase = "Hazırlanıyor"
@@ -192,45 +258,115 @@ class BenchController private constructor(private val context: Context) {
         marathonMinutes = config.effectiveMinutes
         marathonStartedAt = System.currentTimeMillis()
         marathon = null
+        marathonSavedFile = null
+        series = null
+        seriesRuns = total
+        seriesIndex = 0
+        blockedReasons = null
+        repeatWarning = null
         error = null
 
-        TestMode.begin(config.effectiveMinutes)
+        TestMode.begin(sessionMinutes)
         try {
-            TestModeService.start(context, config.effectiveMinutes)
+            TestModeService.start(context, sessionMinutes)
         } catch (_: Throwable) {
         }
         if (bringToFront) bringAppToFront()
 
         marathonJob = scope.launch {
+            val collected = ArrayList<MarathonResult>()
             try {
-                val result = MarathonRunner(context).run(config) { phase, detail, fraction ->
-                    main.post {
-                        marathonPhase = phase
-                        marathonDetail = detail
-                        marathonProgress = fraction.coerceIn(0f, 1f)
-                        TestMode.phase = phase
-                        TestMode.progress = fraction.coerceIn(0f, 1f)
-                        TestMode.detail = detail
+                for (run in 0 until total) {
+                    seriesIndex = run + 1
+                    if (run > 0) {
+                        marathonPhase = "Seriler arası soğuma"
+                        val coolSeconds = cooldownMinutes.coerceIn(1, 30) * 60
+                        for (left in coolSeconds downTo 1) {
+                            marathonDetail = "Sonraki koşuya $left sn · cihaz soğuyor"
+                            TestMode.phase = "Soğuma arası"
+                            TestMode.detail = "Sonraki koşuya $left sn"
+                            TestMode.progress = run.toFloat() / total
+                            delay(1000L)
+                        }
+                    }
+
+                    val base = run.toDouble() / total
+                    val span = 1.0 / total
+                    val result = MarathonRunner(context).run(config) { phase, detail, fraction ->
+                        main.post {
+                            val overall = (base + fraction * span).coerceIn(0.0, 1.0).toFloat()
+                            marathonPhase = if (total > 1) "$phase · koşu ${run + 1}/$total" else phase
+                            marathonDetail = detail
+                            marathonProgress = overall
+                            TestMode.phase = phase
+                            TestMode.detail = detail
+                            TestMode.progress = overall
+                        }
+                    }
+                    val file = withContext(Dispatchers.IO) {
+                        try {
+                            ResultStore.saveMarathon(context, result)
+                        } catch (t: Throwable) {
+                            null
+                        }
+                    }
+                    conditions = result.conditions
+                    equilibrium = result.equilibrium
+                    collected.add(result)
+
+                    withContext(Dispatchers.Main) {
+                        marathon = result
+                        marathonSavedFile = file
+                        conditions = result.conditions
+                        equilibrium = result.equilibrium
+                    }
+
+                    if (total == 1) {
+                        repeatWarning = withContext(Dispatchers.IO) {
+                            Repeatability.compareWithPrevious(context, result)
+                        }
                     }
                 }
-                val file = withContext(Dispatchers.IO) {
-                    try {
-                        ResultStore.saveMarathon(context, result)
-                    } catch (t: Throwable) {
-                        null
+
+                if (collected.size > 1) {
+                    series = Repeatability.summarise(collected.map { it.total })
+                    val s = series
+                    if (s != null) {
+                        withContext(Dispatchers.IO) {
+                            try {
+                                ResultStore.saveSeries(context, s, collected)
+                            } catch (_: Throwable) {
+                            }
+                        }
+                    }
+                    if (s != null && s.unstable) {
+                        repeatWarning = String.format(
+                            Locale.US,
+                            "Koşular arası fark %.1f%% (>%%5) — sonuç güvenilmez, koşulları kontrol edin",
+                            s.spreadPercent
+                        )
                     }
                 }
+
                 withContext(Dispatchers.Main) {
-                    marathon = result
-                    marathonSavedFile = file
                     marathonProgress = 1f
                     marathonPhase = "Tamamlandı"
-                    marathonDetail = "Rapor kaydedildi"
+                    marathonDetail = if (collected.size > 1) "${collected.size} koşu tamamlandı" else "Rapor kaydedildi"
                     marathonRunning = false
                 }
             } catch (c: CancellationException) {
                 withContext(Dispatchers.Main) {
                     marathonPhase = "İptal edildi"
+                    marathonRunning = false
+                }
+            } catch (b: MarathonRunner.ConditionsBlocked) {
+                withContext(Dispatchers.Main) {
+                    conditions = b.conditions
+                    equilibrium = b.equilibrium
+                    blockedReasons = b.reasons
+                    error = "Koşullar uygun değil: " + b.reasons.joinToString(" · ")
+                    marathonPhase = "Koşullar uygun değil"
+                    marathonDetail = b.reasons.joinToString(" · ")
                     marathonRunning = false
                 }
             } catch (t: Throwable) {
@@ -242,6 +378,7 @@ class BenchController private constructor(private val context: Context) {
             } finally {
                 VisualStage.reset()
                 TestMode.end()
+                seriesIndex = 0
                 try {
                     TestModeService.stop(context)
                 } catch (_: Throwable) {
@@ -265,6 +402,11 @@ class BenchController private constructor(private val context: Context) {
         }
     }
 
+    fun clearBlocked() {
+        blockedReasons = null
+        error = null
+    }
+
     fun bringAppToFront() {
         try {
             val intent = Intent(context, MainActivity::class.java).apply {
@@ -284,12 +426,15 @@ class BenchController private constructor(private val context: Context) {
 
     data class Live(
         val cpuTemp: Float?,
+        val cpuAvgTemp: Float?,
         val batteryTemp: Float?,
         val freqMhz: Long,
-        val fps: Double
+        val fps: Double,
+        val thermalStatus: String,
+        val thermalHeadroom: Float?
     )
 
-    /** Cached for one second: the panel polls once a second, sysfs reads are not free. */
+    /** Cached for one second: sysfs reads are not free, the UI ticks every second. */
     fun live(): Live {
         val now = System.currentTimeMillis()
         if (now - liveAt > 900L) {
@@ -299,83 +444,19 @@ class BenchController private constructor(private val context: Context) {
                 liveCpu = snap.cpuC
                 liveBattery = snap.batteryC
                 liveFreq = snap.coreMhz.maxOrNull() ?: 0L
+                liveAvg = snap.cpuAvgC
+                liveStatus = snap.thermalStatusLabel
+                liveHeadroom = snap.thermalHeadroom
             } catch (_: Throwable) {
             }
         }
         val fps = if (VisualStage.active) VisualStage.fps else 0.0
-        return Live(liveCpu, liveBattery, liveFreq, fps)
+        return Live(liveCpu, liveAvg, liveBattery, liveFreq, fps, liveStatus ?: "—", liveHeadroom)
     }
 
-    // -------------------------------------------------------------- web status
-
-    /** JSON consumed by the browser panel roughly once a second. */
-    fun statusJson(): String {
-        val live = live()
-        val suite = when {
-            marathonRunning -> "Maraton"
-            mikyasRunning -> "Mikyas"
-            kinetikRunning -> "Kinetik"
-            else -> ""
-        }
-        val progress = when {
-            marathonRunning -> marathonProgress
-            mikyasRunning -> mikyasProgress
-            kinetikRunning -> kinetikProgress
-            else -> 0f
-        }
-        val phase = when {
-            marathonRunning -> marathonPhase
-            mikyasRunning -> mikyasLabel
-            kinetikRunning -> kinetikLabel
-            else -> ""
-        }
-        val detail = when {
-            marathonRunning -> marathonDetail
-            else -> ""
-        }
-        val elapsed = if (marathonRunning) {
-            ((System.currentTimeMillis() - marathonStartedAt) / 1000L).coerceAtLeast(0)
-        } else 0L
-        val remaining = if (marathonRunning) {
-            (marathonMinutes * 60L - elapsed).coerceAtLeast(0)
-        } else 0L
-
-        return buildString {
-            append('{')
-            append("\"nativeAvailable\":").append(nativeAvailable).append(',')
-            append("\"running\":").append(anyRunning).append(',')
-            append("\"suite\":").append(q(suite)).append(',')
-            append("\"phase\":").append(q(phase)).append(',')
-            append("\"detail\":").append(q(detail)).append(',')
-            append("\"progress\":").append(fmt(progress.toDouble(), 4)).append(',')
-            append("\"scene\":").append(VisualStage.active).append(',')
-            append("\"minutes\":").append(if (marathonRunning) marathonMinutes else 0).append(',')
-            append("\"elapsedSeconds\":").append(elapsed).append(',')
-            append("\"remainingSeconds\":").append(remaining).append(',')
-            append("\"live\":{")
-            append("\"cpu\":").append(num(live.cpuTemp?.toDouble())).append(',')
-            append("\"battery\":").append(num(live.batteryTemp?.toDouble())).append(',')
-            append("\"freqMhz\":").append(live.freqMhz).append(',')
-            append("\"fps\":").append(fmt(live.fps, 1))
-            append("},")
-            append("\"error\":").append(q(error))
-            append('}')
-        }
-    }
-
-    /** Full detail of the last marathon: series for charts, not just the summary. */
-    fun detailJson(): String {
-        marathon?.let { return MarathonJson.encode(it) }
-        val newest = ResultStore.list(context)
-            .firstOrNull { it.name.startsWith("maraton_") }
-        if (newest != null) {
-            try {
-                return newest.readText()
-            } catch (_: Throwable) {
-            }
-        }
-        return "{\"available\":false}"
-    }
+    private var liveAvg: Float? = null
+    private var liveStatus: String? = null
+    private var liveHeadroom: Float? = null
 
     // ------------------------------------------------------------------- share
 
@@ -396,7 +477,7 @@ class BenchController private constructor(private val context: Context) {
             }
             "Maraton" -> marathon?.let { r ->
                 buildString {
-                    appendLine("Maraton · ${r.device}")
+                    appendLine("Maraton · ${r.device} · v${r.appVersion} (iş yükü v${r.workloadVersion})")
                     appendLine("Toplam: ${fmt1(r.total)}")
                     appendLine("Tek çekirdek: ${fmt1(r.singleScore)}")
                     appendLine("Çok çekirdek: ${fmt1(r.multiScore)}")
@@ -404,11 +485,19 @@ class BenchController private constructor(private val context: Context) {
                     appendLine("Depolama: ${fmt1(r.storageScore)}")
                     appendLine("GPU: ${fmt1(r.gpuScore)} (${r.gpuApi})")
                     appendLine("Arayüz: ${fmt1(r.uxScore)}")
-                    appendLine("Kararlılık: ${fmt1(r.stabilityScore)}")
+                    appendLine("Kararlılık: ${fmt1(r.stabilityScore)} (hız ${fmt1(r.stability.retentionScore)} · sapma ${fmt1(r.stability.consistencyScore)})")
+                    appendLine("Hız koruma: ${r.retentionPercent?.let { String.format(Locale.US, "%.1f%%", it) } ?: "—"}")
+                    appendLine("CV tek/çok: ${String.format(Locale.US, "%.2f%% / %.2f%%", r.stability.singleCv, r.stability.multiCv)}")
                     appendLine("Süre: ${r.durationSeconds.toInt()} sn")
                     appendLine("Isıl tepe: ${r.peakTempC?.let { String.format(Locale.US, "%.1f °C", it) } ?: "—"}")
-                    appendLine("Hız koruma: ${r.retentionPercent?.let { String.format(Locale.US, "%.1f%%", it) } ?: "—"}")
-                    append("Sürdürülen CV: ${String.format(Locale.US, "%.2f%%", r.stabilityCv)}")
+                    r.energy?.avgWatts?.let { appendLine("Ortalama güç: ${String.format(Locale.US, "%.2f W", it)}") }
+                    series?.let { s ->
+                        appendLine("Koşular: ${s.totals.joinToString(" / ") { fmt1(it) }}")
+                        appendLine("Medyan: ${fmt1(s.median)} ± ${fmt1(s.halfRange)}")
+                    }
+                    append("Koşul: ${r.conditions.batteryPercent?.let { "%$it" } ?: "—"} · " +
+                        "şarj ${if (r.conditions.charging == true) "takılı" else "değil"} · " +
+                        "güç tasarrufu ${if (r.conditions.powerSave == true) "açık" else "kapalı"}")
                 }
             }
             else -> kinetik?.let { r ->
@@ -425,29 +514,6 @@ class BenchController private constructor(private val context: Context) {
     }
 
     private fun fmt1(v: Double): String = String.format(Locale.US, "%.1f", v)
-
-    private fun fmt(v: Double, digits: Int): String = String.format(Locale.US, "%.${digits}f", v)
-
-    private fun num(v: Double?): String =
-        if (v == null || v.isNaN() || v.isInfinite()) "null" else fmt(v, 1)
-
-    private fun q(s: String?): String {
-        if (s == null) return "null"
-        val sb = StringBuilder(s.length + 8)
-        sb.append('"')
-        for (ch in s) {
-            when (ch) {
-                '"' -> sb.append("\\\"")
-                '\\' -> sb.append("\\\\")
-                '\n' -> sb.append("\\n")
-                '\r' -> sb.append("\\r")
-                '\t' -> sb.append("\\t")
-                else -> if (ch < ' ') sb.append("\\u%04x".format(ch.code)) else sb.append(ch)
-            }
-        }
-        sb.append('"')
-        return sb.toString()
-    }
 
     companion object {
         @Volatile
